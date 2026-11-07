@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Acceso — Seguimiento de valor · CESA</title>
+
+  <link rel="stylesheet" href="assets/css/tailwind-output.css">
+  <link rel="stylesheet" href="assets/css/auth.css">
+
+  <style>
+    /* Portal: auth.css se linkea por convención pero esta página no es de auth; su body { #041F3E } pisaría bg-cesa-gray-bg. */
+    body { background-color: var(--color-cesa-gray-bg); }
+
+    /* Punto de estado del activo: animate-pulse compila, pero no su variante motion-safe; con movimiento reducido queda fijo. */
+    @media (prefers-reduced-motion: reduce) { .asset-dot-live { animation: none; } }
+
+    /* Utilidades responsive que aún no existen en tailwind-output.css (ninguna vista las usa); el build de producción las genera solo. */
+    @media (min-width: 768px) {
+      .md\:flex-none { flex: none; }
+      .md\:min-w-\[150px\] { min-width: 150px; }
+      .md\:px-3 { padding-inline: 12px; }
+      .md\:pr-3 { padding-right: 12px; }
+      .md\:max-w-\[260px\] { max-width: 260px; }
+      .md\:w-fit { width: fit-content; }
+      .md\:w-\[220px\] { width: 220px; }
+      .md\:text-xs { font-size: .75rem; }
+      .md\:leading-\[1\.3\] { line-height: 1.3; }
+      .md\:py-2 { padding-block: 8px; }
+    }
+    .max-w-\[calc\(100vw-32px\)\] { max-width: calc(100vw - 32px); }
+
+    /* Utilidades aún no compiladas (ninguna vista las usa); el build de producción las genera solo */
+    .grid-rows-2 { grid-template-rows: repeat(2, minmax(0, 1fr)); }
+    .min-h-\[70vh\] { min-height: 70vh; }
+    .origin-left { transform-origin: left; }
+    .scale-x-0 { transform: scaleX(0); }
+    .scale-x-100 { transform: scaleX(1); }
+    .inset-x-3 { left: 12px; right: 12px; }
+    .-bottom-px { bottom: -1px; }
+    .h-\[3px\] { height: 3px; }
+    .rounded-t-\[3px\] { border-top-left-radius: 3px; border-top-right-radius: 3px; }
+
+    /* Gestos de movimiento (referencia 4U, insights-v6): solo opacity/transform y solo sin movimiento reducido */
+    @media (prefers-reduced-motion: no-preference) {
+      @keyframes panel-in { from { opacity: 0; transform: translateX(24px); } to { opacity: 1; transform: none; } }
+      @keyframes panel-back { from { opacity: 0; transform: translateX(-24px); } to { opacity: 1; transform: none; } }
+      @keyframes card-in { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
+      .panel-in { animation: panel-in .4s cubic-bezier(.16, 1, .3, 1) both; }
+      .panel-back { animation: panel-back .4s cubic-bezier(.16, 1, .3, 1) both; }
+      .card-in { animation: card-in .4s cubic-bezier(.16, 1, .3, 1) both; }
+      @keyframes square-in { from { opacity: 0; transform: scale(.95); } to { opacity: 1; transform: none; } }
+      .square-in { animation: square-in .4s cubic-bezier(.16, 1, .3, 1) both; }
+      .square-in:nth-child(2) { animation-delay: 60ms; }
+      .square-in:nth-child(3) { animation-delay: 120ms; }
+      .square-in:nth-child(4) { animation-delay: 180ms; }
+      @keyframes status-in { from { opacity: 0; } to { opacity: 1; } }
+      .status-in { animation: status-in .2s ease-out both; }
+      .card-float { animation: card-in .4s cubic-bezier(.16, 1, .3, 1) .28s both; }
+    }
+
+    /* Escritorio: cada vista cabe en pantalla, así que el documento no muestra barra de scroll; móvil scrollea normal */
+    @media (min-width: 1280px) and (min-height: 800px) {
+      html, body { overflow: hidden; }
+    }
+
+    /* auth.css (linkeado por convención) anula box-shadow y outline con !important en todo elemento; esta página es del portal,
+       así que la previsualización restituye las sombras de las cards y el foco visible con la misma prioridad. */
+    .shadow-sm { box-shadow: 0 1px 3px 0 #0000001a, 0 1px 2px -1px #0000001a !important; }
+    .shadow-lg { box-shadow: 0 10px 15px -3px #0000001a, 0 4px 6px -4px #0000001a !important; }
+    .hover\:shadow-md:hover { box-shadow: 0 4px 6px -1px #0000001a, 0 2px 4px -2px #0000001a !important; }
+    .focus-visible\:outline-2:focus-visible { outline: 2px solid var(--color-cesa-blue) !important; outline-offset: 2px; }
+    .focus-visible\:ring-2:focus-visible { box-shadow: 0 0 0 2px var(--color-cesa-blue) !important; }
+    /* Botón Primary (Figma [cs-comp] Buttons): foco Border / Focused / Default y disabled sin opacidad; variantes aún no compiladas */
+    .focus-visible\:outline-information-200:focus-visible { outline-color: var(--color-information-200) !important; }
+    .disabled\:bg-neutral-200:disabled { background-color: var(--color-neutral-200); }
+    /* «Reenviar» en espera: aria-disabled (sigue enfocable); texto legible (neutral-600) y borde neutral-400; variantes aún no compiladas */
+    .aria-disabled\:cursor-not-allowed[aria-disabled="true"] { cursor: not-allowed; }
+    .aria-disabled\:text-neutral-600[aria-disabled="true"] { color: var(--color-neutral-600); }
+    .aria-disabled\:border-neutral-400[aria-disabled="true"] { border-color: var(--color-neutral-400) !important; } /* !important: auth.css fuerza .border-cesa-blue con !important */
+    .aria-disabled\:hover\:bg-transparent[aria-disabled="true"]:hover { background-color: transparent; }
+    /* Hover y pressed del Primary: Orange Hover #ffce78 y Orange Pressed #ec8404 no existen en el @theme (data-pending-token en el botón) */
+    #access-submit:hover:not(:disabled) { background-color: #ffce78; }
+    #access-submit:active:not(:disabled) { background-color: #ec8404; }
+
+    /* auth.css (linkeado por convención) pone border:none !important a los inputs; esta página es del portal y el campo lleva borde completo de 1px neutral-600 (≥ 3:1 contra la card; border-neutral-600 aún no compila) */
+    [data-screen="access"] input[type="email"] { border: 1px solid var(--color-neutral-600) !important; }
+    [data-screen="access"] input[type="email"][aria-invalid="true"] { border-color: var(--color-error-200) !important; }
+
+    /* Popover abierto por tap (móvil): el JS alterna is-open; hover y foco siguen funcionando por CSS */
+    [role="tooltip"].is-open { display: block; }
+
+    /* Móvil: el popover ocupa el ancho del viewport menos 16px por lado, sin depender del JS; el JS solo ajusta el top */
+    @media (max-width: 767px) {
+      [role="tooltip"] {
+        position: fixed;
+        left: 16px;
+        right: 16px;
+        top: auto;
+        bottom: 16px;
+        width: auto;
+        max-width: none;
+        max-height: calc(100% - 32px);
+        overflow-y: auto;
+      }
+    }
+
+    /* Scaffolding del wireframe: el escenario mock del <body> decide qué variante de cada card se ve.
+       No es CSS de producción — en el .cshtml cada estado lo resuelve el servidor / JS real. */
+    [data-state] { display: none; }
+    body[data-mock-state="default"] [data-state~="default"],
+    body[data-mock-state="sent"] [data-state~="sent"],
+    body[data-mock-state="error-domain"] [data-state~="error-domain"],
+    body[data-mock-state="expired"] [data-state~="expired"],
+    body[data-mock-state="loading"] [data-state~="loading"] { display: block; }
+  </style>
+</head>
+
+<body class="font-outfit bg-cesa-gray-bg min-h-screen flex flex-col" data-mock-state="default">
+
+  <!-- ====================================================================
+       HEADER MÍNIMO — mismo chrome que el tablero, sin selector ni badge
+       ==================================================================== -->
+  <header class="bg-white border-b border-neutral-200">
+    <div class="max-w-[1440px] mx-auto w-full px-4 md:px-6 py-3 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+      <div class="flex items-center gap-3 min-w-0">
+        <img src="assets/images/Redesign/svg/LogoCesaBlue.svg"
+             alt="CESA" class="h-10 w-auto object-contain shrink-0">
+        <div class="flex flex-col md:flex-row md:items-center md:gap-3 min-w-0">
+          <h1 class="font-outfit font-bold text-[24px] leading-none tracking-[-1px] text-cesa-blue m-0">Seguimiento de valor</h1>
+          <p class="font-outfit font-light text-[14px] leading-[1.3] text-neutral-600 m-0">Célula de Activos Digitales</p>
+        </div>
+      </div>
+
+    </div>
+  </header>
+
+  <!-- ====================================================================
+       MAIN — acceso por magic link (DEC-REP-43-037)
+       ==================================================================== -->
+  <main data-screen="access" class="relative flex-1 min-w-0 min-h-[70vh] flex items-center justify-center px-4 md:px-6 py-8">
+    <!-- Región viva persistente (ACC-14): siempre en el DOM, fuera de los contenedores data-state que alternan display; el JS le inyecta los anuncios -->
+    <div id="access-live" role="status" aria-live="polite" class="sr-only"></div>
+    <!-- Fondo: cuadrícula 2×2 con los cuatro colores del DS (DEC-REP-43-044); solo decorativa -->
+    <div aria-hidden="true" class="absolute inset-0 grid grid-cols-2 grid-rows-2" data-background="cuadricula">
+      <!-- Escala Blue del Figma CESA-DS (design.md §3.1): 700 → 600 → 500 → 400; en el @theme son primary-azul-001/002/003/005 -->
+      <div class="bg-cesa-blue square-in"></div>
+      <div class="bg-primary-azul-002 square-in"></div>
+      <div class="bg-primary-azul-003 square-in"></div>
+      <div class="bg-primary-azul-005 square-in"></div>
+    </div>
+    <div class="relative z-10 max-w-md mx-auto w-full flex flex-col gap-4 card-float">
+
+      <div data-state="expired">
+        <div class="flex items-center gap-2 p-2 rounded-[4px] border border-warning-200 bg-warning-50" role="alert">
+          <span class="inline-flex items-center justify-center w-5 h-5 shrink-0"><img src="assets/images/svg/IconWarning.svg" alt="" class="w-4 h-4 shrink-0" aria-hidden="true"></span>
+          <p class="font-outfit font-light text-[14px] leading-[1.3] text-primary-azul-004 m-0">Este link venció. Pide uno nuevo.</p>
+        </div>
+      </div>
+
+      <section class="bg-white rounded-[4px] shadow-lg p-5 flex flex-col gap-4" aria-labelledby="access-title">
+        <div data-state="default error-domain expired loading">
+          <h1 id="access-title" class="font-outfit font-semibold text-[24px] leading-[1.3] text-cesa-blue-dark m-0">Ingresa tu correo del CESA</h1>
+          <p class="font-outfit font-light text-[16px] leading-[1.4] text-neutral-600 m-0 mt-2">Ingresa tu correo para consultar el tablero. Registramos el correo, la fecha y la hora de cada ingreso.</p>
+          <form class="flex flex-col gap-4 mt-4" novalidate data-track="pedir-link">
+            <!-- Atoms/_Input -->
+            <div class="flex flex-col gap-1">
+              <label for="access-email" class="font-outfit font-light text-[14px] text-neutral-600">Correo del CESA</label>
+              <input type="email" id="access-email" name="email" autocomplete="email" placeholder="nombre@cesa.edu.co" required
+                     aria-describedby="access-email-error"
+                     class="w-full h-[45px] px-3 bg-white border border-neutral-600 rounded-[4px] font-outfit font-light text-[16px] text-cesa-blue-dark placeholder-neutral-600 outline-none focus-visible:ring-2 focus-visible:ring-cesa-blue disabled:opacity-50 disabled:cursor-not-allowed">
+              <div aria-live="polite">
+                <div data-state="error-domain">
+                  <p id="access-email-error" role="alert" class="font-outfit font-light text-[14px] text-error-200 leading-[1.3] m-0">Solo correos @cesa.edu.co</p>
+                </div>
+              </div>
+            </div>
+            <!-- Atoms/_Button primary (estado loading con Atoms/_LoadingSpinner).
+                 Primary según Figma [cs-comp] Buttons 375-5281: Orange Default + texto navy, radio 2px;
+                 el átomo _Button de producción (texto blanco, radio 4px) está desfasado del DS.
+                 Hover #ffce78 y pressed #ec8404 no tienen token en el @theme (ver data-pending-token y las reglas del <style>).
+                 Focus: anillo Border / Focused / Default (#019bff) [FALTA: estado focus de Buttons en Figma] -->
+            <button type="submit" id="access-submit"
+                    class="max-w-full inline-flex items-center justify-center gap-2 p-3 min-h-[45px] rounded-[2px] font-outfit font-light text-[16px] leading-[1.3] cursor-pointer transition-colors bg-cesa-orange text-cesa-blue-dark disabled:cursor-not-allowed disabled:bg-neutral-200 disabled:text-neutral-400 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-information-200"
+                    data-pending-token="bg-orange-hover:#ffce78 bg-orange-pressed:#ec8404">
+              <span id="access-spinner" class="c4l-spinner w-[18px] h-[18px] hidden" role="status" aria-hidden="true"></span>
+              <span id="access-submit-label" class="min-w-0 truncate whitespace-nowrap">Ingresar</span>
+            </button>
+          </form>
+          <div data-state="expired">
+            <a href="pages/general-dashboard.html" class="font-outfit text-[14px] text-cesa-blue underline-offset-2 hover:underline inline-flex items-center gap-1 mt-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cesa-blue" data-track="volver-al-tablero">Volver al tablero <span class="inline-flex items-center justify-center w-5 h-5 shrink-0"><img src="assets/images/Redesign/svg/arrow-right-regular.svg" alt="" class="w-4 h-4 shrink-0" aria-hidden="true"></span></a>
+          </div>
+        </div>
+
+        <div data-state="sent">
+          <div class="flex flex-col gap-3">
+            <svg viewBox="0 0 18 18" fill="currentColor" class="w-8 h-8 shrink-0 text-success-200" aria-hidden="true"><path d="M12.2105 6.91453C12.2628 6.96677 12.3043 7.02881 12.3326 7.0971C12.3609 7.16538 12.3754 7.23858 12.3754 7.3125C12.3754 7.38642 12.3609 7.45962 12.3326 7.5279C12.3043 7.59619 12.2628 7.65823 12.2105 7.71047L8.27297 11.648C8.22073 11.7003 8.15869 11.7418 8.09041 11.7701C8.02212 11.7984 7.94892 11.8129 7.875 11.8129C7.80108 11.8129 7.72789 11.7984 7.6596 11.7701C7.59131 11.7418 7.52928 11.7003 7.47703 11.648L5.78953 9.96047C5.68399 9.85492 5.62469 9.71177 5.62469 9.5625C5.62469 9.41323 5.68399 9.27008 5.78953 9.16453C5.89508 9.05898 6.03824 8.99969 6.1875 8.99969C6.33677 8.99969 6.47992 9.05898 6.58547 9.16453L7.875 10.4548L11.4145 6.91453C11.4668 6.86223 11.5288 6.82074 11.5971 6.79244C11.6654 6.76413 11.7386 6.74956 11.8125 6.74956C11.8864 6.74956 11.9596 6.76413 12.0279 6.79244C12.0962 6.82074 12.1582 6.86223 12.2105 6.91453ZM16.3125 9C16.3125 10.4463 15.8836 11.8601 15.0801 13.0626C14.2766 14.2651 13.1346 15.2024 11.7984 15.7559C10.4622 16.3093 8.99189 16.4541 7.57341 16.172C6.15492 15.8898 4.85196 15.1934 3.82928 14.1707C2.80661 13.148 2.11017 11.8451 1.82801 10.4266C1.54586 9.00811 1.69067 7.53781 2.24413 6.20163C2.7976 4.86544 3.73486 3.72339 4.9374 2.91988C6.13993 2.11637 7.55373 1.6875 9 1.6875C10.9388 1.68955 12.7975 2.46063 14.1685 3.83154C15.5394 5.20246 16.3105 7.06123 16.3125 9ZM15.1875 9C15.1875 7.77623 14.8246 6.57994 14.1447 5.56241C13.4648 4.54488 12.4985 3.75181 11.3679 3.2835C10.2372 2.81518 8.99314 2.69265 7.79288 2.93139C6.59262 3.17014 5.49012 3.75944 4.62478 4.62478C3.75944 5.49011 3.17014 6.59262 2.93139 7.79288C2.69265 8.99314 2.81518 10.2372 3.2835 11.3679C3.75182 12.4985 4.54488 13.4648 5.56241 14.1447C6.57994 14.8246 7.77623 15.1875 9 15.1875C10.6405 15.1856 12.2132 14.5331 13.3732 13.3732C14.5331 12.2132 15.1856 10.6405 15.1875 9Z"/></svg>
+            <h1 id="access-sent-title" tabindex="-1" class="font-outfit font-semibold text-[24px] leading-[1.3] text-cesa-blue-dark m-0">Revisa tu correo</h1>
+            <p class="font-outfit font-light text-[16px] leading-[1.4] text-neutral-600 m-0">Te enviamos el link a <span id="access-sent-email" class="font-medium text-cesa-blue-dark">ana.gomez@cesa.edu.co</span>. Si no llega en 2 minutos, pídelo de nuevo.</p>
+            <!-- Atoms/_Button secondary: tras pulsarlo se deshabilita 30 s con cuenta atrás (en el mock, 5 s con ?fast=1) -->
+            <button type="button" id="access-resend" data-track="reenviar-link"
+                    class="max-w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 min-h-[44px] rounded-[2px] font-outfit font-light text-[16px] leading-[16px] cursor-pointer transition-colors border border-cesa-blue bg-transparent text-cesa-blue hover:bg-neutral-100 aria-disabled:cursor-not-allowed aria-disabled:border-neutral-400 aria-disabled:text-neutral-600 aria-disabled:hover:bg-transparent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cesa-blue">
+              <span id="access-resend-label" class="min-w-0 truncate whitespace-nowrap py-[3px]">Reenviar</span>
+            </button>
+            <p id="access-resend-status" class="font-outfit font-light text-[14px] leading-[1.3] text-cesa-blue-dark m-0 hidden">Te enviamos el link de nuevo</p>
+            <button type="button" id="access-fix-email" data-track="corregir-correo"
+                    class="self-start inline-flex items-center min-h-[44px] font-outfit font-light text-[14px] text-cesa-blue underline-offset-2 hover:underline cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cesa-blue">Corregir correo</button>
+          </div>
+        </div>
+      </section>
+
+    </div>
+  </main>
+
+  <footer class="w-full text-white bg-primary-azul-004">
+    <div class="max-w-[1440px] mx-auto w-full px-4 py-3 flex flex-wrap items-center justify-between gap-3">
+      <div class="flex items-center gap-2">
+        <img src="assets/images/Redesign/svg/LogoCesaFooter.svg" alt="CESA"
+             class="w-6 h-6 object-contain shrink-0">
+        <p class="font-outfit font-light text-[14px] leading-[1.3] m-0">CESA · Célula de Activos Digitales</p>
+      </div>
+      <p class="font-outfit font-light text-[14px] leading-[1.3] m-0">Línea base — esta vista no fija metas · 2026</p>
+    </div>
+  </footer>
+
+  <script>
+    (function () {
+      // Pega aquí el endpoint de tu formulario de Formspree (Formspree → tu form → Integration).
+      var FORMSPREE_ENDPOINT = 'https://formspree.io/f/TU_ID_DE_FORMSPREE';
+      var DASHBOARD_URL = 'pages/general-dashboard.html';
+      // Vacío acepta cualquier correo válido; 'cesa.edu.co' acepta solo ese dominio.
+      var ALLOWED_DOMAIN = '';
+
+      var configured = FORMSPREE_ENDPOINT.indexOf('TU_ID') === -1;
+      var input = document.getElementById('access-email');
+      var submit = document.getElementById('access-submit');
+      var spinner = document.getElementById('access-spinner');
+      var label = document.getElementById('access-submit-label');
+      var error = document.getElementById('access-email-error');
+      var live = document.getElementById('access-live');
+      var form = submit.closest('form');
+
+      if (!configured) console.warn('Registro de ingresos desactivado: falta el endpoint de Formspree en index.html');
+      error.textContent = ALLOWED_DOMAIN ? 'Solo correos @' + ALLOWED_DOMAIN : 'Escribe un correo válido.';
+
+      try {
+        var last = localStorage.getItem('ultimoCorreo');
+        if (last) input.value = last;
+      } catch (e) {}
+      input.focus();
+
+      function setState(next) {
+        document.body.setAttribute('data-mock-state', next);
+        if (next === 'error-domain') input.setAttribute('aria-invalid', 'true'); else input.removeAttribute('aria-invalid');
+      }
+      function setLoading(on) {
+        input.disabled = on;
+        submit.disabled = on;
+        spinner.classList.toggle('hidden', !on);
+        label.textContent = on ? 'Ingresando…' : 'Ingresar';
+      }
+      function domainAllowed(value) {
+        if (!ALLOWED_DOMAIN) return true;
+        return new RegExp('@' + ALLOWED_DOMAIN.replace(/./g, '\.') + '$', 'i').test(value);
+      }
+      function register(email) {
+        if (!configured) return Promise.resolve(false);
+        var now = new Date();
+        var bogota = { timeZone: 'America/Bogota' };
+        return fetch(FORMSPREE_ENDPOINT, {
+          method: 'POST',
+          headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            email: email,
+            fecha: now.toLocaleDateString('es-CO', bogota),
+            hora: now.toLocaleTimeString('es-CO', bogota),
+            _subject: 'Ingreso al tablero: ' + email
+          })
+        }).then(function (response) { return response.ok; }).catch(function () { return false; });
+      }
+
+      form.addEventListener('submit', function (event) {
+        event.preventDefault();
+        var value = input.value.trim();
+        if (!value || !input.checkValidity() || !domainAllowed(value)) {
+          setState('error-domain');
+          live.textContent = error.textContent;
+          input.focus();
+          return;
+        }
+        setState('default');
+        setLoading(true);
+        register(value).then(function () {
+          try { localStorage.setItem('ultimoCorreo', value); } catch (e) {}
+          window.location.href = DASHBOARD_URL;
+        });
+      });
+    })();
+  </script>
+</body>
+</html>

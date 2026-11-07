@@ -1,0 +1,1654 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Seguimiento de valor — Célula de Activos Digitales · CESA</title>
+
+  <link rel="stylesheet" href="../assets/css/tailwind-output.css">
+  <link rel="stylesheet" href="../assets/css/auth.css">
+
+  <style>
+    /* Portal: auth.css se linkea por convención pero esta página no es de auth; su body { #041F3E } pisaría bg-cesa-gray-bg. */
+    body { background-color: var(--color-cesa-gray-bg); }
+
+    /* Punto de estado del activo: animate-pulse compila, pero no su variante motion-safe; con movimiento reducido queda fijo. */
+    @media (prefers-reduced-motion: reduce) { .asset-dot-live { animation: none; } }
+
+    /* Utilidades responsive que aún no existen en tailwind-output.css (ninguna vista las usa); el build de producción las genera solo. */
+    @media (min-width: 768px) {
+      .md\:flex-none { flex: none; }
+      .md\:min-w-\[150px\] { min-width: 150px; }
+      .md\:w-fit { width: fit-content; }
+      .md\:w-\[220px\] { width: 220px; }
+      .md\:pb-3 { padding-bottom: 12px; }
+      .md\:text-xs { font-size: .75rem; }
+      .md\:text-\[12px\] { font-size: 12px; }
+      .md\:leading-\[1\.3\] { line-height: 1.3; }
+      .md\:py-2 { padding-block: 8px; }
+    }
+    .max-w-\[calc\(100vw-32px\)\] { max-width: calc(100vw - 32px); }
+
+    /* Utilidades aún no compiladas (ninguna vista las usa); el build de producción las genera solo */
+    .md\:w-\[220px\] { }
+    .rounded-t-\[2px\] { border-top-left-radius: 2px; border-top-right-radius: 2px; }
+    .border-white\/20 { border-color: rgb(255 255 255 / 0.2); }
+    .min-h-\[160px\] { min-height: 160px; }
+    .-mb-px { margin-bottom: -1px; }
+    /* Tab group: el tema resuelve gap-0 en 2px (--spacing-0: 2px); las pestañas van pegadas */
+    [role="tablist"] { gap: 0; }
+    /* Chip de delta desfavorable (DEC-REP-43-053): `bg-error-200 text-white` (clases compiladas; sin instancia en el mock porque todas las métricas mejoran) */
+    .border-white\/40 { border-color: rgb(255 255 255 / 0.4); }
+    /* Controles sobre tile azul: el anillo de foco pasa a blanco (variante aún no compilada; va después de la restitución del outline) */
+    @media (min-width: 768px) { .md\:pl-\[166px\] { padding-left: 166px; } }
+
+    /* Tablas (salud, impactos) en móvil: la tabla semántica se apila por filas (cada fila como card) sin scroll horizontal; solo previsualización */
+    @media (max-width: 767px) {
+      [data-table] thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0, 0, 0, 0); }
+      [data-table] tbody tr { display: block; height: auto; padding: 8px 0; }
+      [data-table] tbody th, [data-table] tbody td { display: block; padding: 2px 0; }
+      [data-table] tbody td::before { content: attr(data-label) ': '; font-family: inherit; font-weight: 500; font-size: 12px; color: var(--color-neutral-600); }
+    }
+
+    /* Gestos de movimiento (referencia 4U, insights-v6): solo opacity/transform y solo sin movimiento reducido */
+    @media (prefers-reduced-motion: no-preference) {
+      @keyframes panel-in { from { opacity: 0; transform: translateX(24px); } to { opacity: 1; transform: none; } }
+      @keyframes panel-back { from { opacity: 0; transform: translateX(-24px); } to { opacity: 1; transform: none; } }
+      @keyframes card-in { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
+      .panel-in { animation: panel-in .4s cubic-bezier(.16, 1, .3, 1) both; }
+      .panel-back { animation: panel-back .4s cubic-bezier(.16, 1, .3, 1) both; }
+      .card-in { animation: card-in .4s cubic-bezier(.16, 1, .3, 1) both; }
+    }
+
+    /* auth.css (linkeado por convención) anula box-shadow y outline con !important en todo elemento; esta página es del portal,
+       así que la previsualización restituye las sombras de las cards y el foco visible con la misma prioridad. */
+    .shadow-sm { box-shadow: 0 1px 3px 0 #0000001a, 0 1px 2px -1px #0000001a !important; }
+    .hover\:shadow-md:hover { box-shadow: 0 4px 6px -1px #0000001a, 0 2px 4px -2px #0000001a !important; }
+    .focus-visible\:outline-2:focus-visible { outline: 2px solid var(--color-cesa-blue) !important; outline-offset: 2px; }
+    .focus-visible\:ring-2:focus-visible { box-shadow: 0 0 0 2px var(--color-cesa-blue) !important; }
+    .focus-visible\:outline-white:focus-visible { outline-color: #fff !important; }
+    /* auth.css fuerza .border-cesa-blue a 1px en los cuatro lados; el tab seleccionado del Tab group lleva solo 2px abajo (pisa la línea del contenedor con -mb-px) */
+    [role="tab"].border-cesa-blue { border-width: 0 0 2px !important; border-style: solid; border-color: var(--color-cesa-blue) !important; }
+
+    /* Móvil: el deslizamiento de entrada de los paneles (transform) no debe generar scroll horizontal transitorio; clip no crea contenedor de scroll */
+    @media (max-width: 767px) { main { overflow-x: clip; } }
+
+    /* Área de toque ≥ 44 px sin agrandar el control (DASH-04): pseudo-elemento absoluto. En producción: relative before:absolute before:-inset-3 before:content-[''] (3 = 12 px) */
+    .hit-44, .hit-44-chip, .hit-44-chip-down, .hit-44-y12 { position: relative; }
+    .hit-44::before, .hit-44-chip::before, .hit-44-chip-down::before, .hit-44-y12::before { content: ""; position: absolute; }
+    .hit-44::before { inset: -12px; }
+    .hit-44-chip-down::before { inset: 0 0 -19px; } /* chip de General: el «?» de arriba ya reserva 12 px debajo de su fila, así que el área extra del chip va solo hacia abajo */
+    .hit-44-chip::before { inset: -12px 0 -8px; } /* los chips tienen 8 px de aire debajo: el área extra va arriba y se corta donde empieza el siguiente bloque */
+    .hit-44-y12::before { inset: -12px 0; }
+
+    /* Popover abierto por tap (móvil): el JS alterna is-open; hover y foco siguen funcionando por CSS */
+    [role="tooltip"].is-open { display: block; }
+
+    /* Móvil: el popover ocupa el ancho del viewport menos 16px por lado, sin depender del JS; el JS solo ajusta el top */
+    @media (max-width: 767px) {
+      [role="tooltip"] {
+        position: fixed;
+        left: 16px;
+        right: 16px;
+        top: auto;
+        bottom: 16px;
+        width: auto;
+        max-width: none;
+        max-height: calc(100% - 32px);
+        overflow-y: auto;
+      }
+    }
+
+    /* Scaffolding del wireframe: el escenario mock del <body> decide qué variante de cada card se ve.
+       No es CSS de producción — en el .cshtml cada estado lo resuelve el servidor / JS real. */
+    [data-state] { display: none; }
+    body[data-mock-state="default"] [data-state~="default"],
+    body[data-mock-state="empty-week"] [data-state~="empty-week"],
+    body[data-mock-state="source-error"] [data-state~="source-error"],
+    body[data-mock-state="loading"] [data-state~="loading"] { display: block; }
+  </style>
+</head>
+
+<body class="font-outfit bg-cesa-gray-bg min-h-screen flex flex-col" data-mock-state="default">
+<script>
+  (function () {
+    var allowed = ['default', 'empty-week', 'source-error', 'loading'];
+    var mock = new URLSearchParams(window.location.search).get('mock') || 'default';
+    document.body.setAttribute('data-mock-state', allowed.indexOf(mock) > -1 ? mock : 'default');
+  })();
+</script>
+
+  <!-- ====================================================================
+       HEADER MÍNIMO PROPIO — sin navbar del portal, sin sidebar de admin
+       ==================================================================== -->
+  <header class="bg-white border-b border-neutral-200">
+    <div class="max-w-[1440px] mx-auto w-full px-4 md:px-6 py-3 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+      <div class="flex items-center gap-3 min-w-0">
+        <img src="../assets/images/Redesign/svg/LogoCesaBlue.svg"
+             alt="CESA" class="h-10 w-auto object-contain shrink-0">
+        <div class="flex flex-col md:flex-row md:items-center md:gap-3 min-w-0">
+          <h1 class="font-outfit font-bold text-[24px] leading-none tracking-[-1px] text-cesa-blue m-0">Seguimiento de valor</h1>
+          <p class="font-outfit font-light text-[14px] leading-[1.3] text-neutral-600 m-0">Célula de Activos Digitales</p>
+        </div>
+      </div>
+      <!-- Derecha: Activos (Molecules/_CustomDropdown, sin label visible) + badge de última actualización con su popover -->
+      <div class="flex flex-col gap-2 w-full md:w-auto md:flex-row md:items-center">
+        <div class="relative font-outfit w-full md:w-[220px]" data-dropdown="assets">
+          <button type="button" id="assets-trigger" data-track="seleccionar-activos"
+                  class="flex items-center justify-between w-full gap-2 min-h-[45px] px-3 py-2 border border-cesa-blue rounded-[4px] bg-white text-cesa-blue font-outfit font-light text-[16px] leading-[16px] text-left cursor-pointer transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-cesa-blue focus-visible:ring-offset-1"
+                  aria-expanded="false" aria-controls="assets-group">
+            <span class="inline-flex items-center gap-2 min-w-0">
+              <span class="inline-block w-2 h-2 rounded-full shrink-0 bg-success-200 animate-pulse asset-dot-live" id="assets-trigger-dot" aria-hidden="true"></span>
+              <span class="sr-only">Activos: </span><span class="truncate" id="assets-trigger-text" data-empty-text="Selecciona activos" data-all-text="Consolidado">Consolidado</span>
+            </span>
+            <span class="inline-flex items-center justify-center w-5 h-5 shrink-0"><svg class="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" aria-hidden="true" focusable="false">
+              <path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
+            </svg></span>
+          </button>
+          <div id="assets-group" role="group" aria-label="Activos"
+               class="hidden absolute left-0 right-0 top-full z-50 mt-1 max-h-[260px] overflow-y-auto bg-white border border-neutral-200 rounded-[4px] shadow-lg py-1">
+            <label for="assets-select-all" class="flex items-center gap-2 min-h-[44px] px-3 cursor-pointer hover:bg-cesa-blue/5 border-b border-neutral-200">
+              <input type="checkbox" id="assets-select-all"
+                     class="select-all-checkbox w-5 h-5 accent-cesa-blue rounded cursor-pointer">
+              <span class="font-outfit font-medium text-[16px] text-cesa-blue-dark">Todos</span>
+            </label>
+            <label for="asset-c4l" class="flex items-center gap-2 min-h-[44px] px-3 cursor-pointer hover:bg-cesa-blue/5">
+              <input type="checkbox" id="asset-c4l" name="assets" value="c4l" checked data-asset-label="C4L"
+                     class="w-5 h-5 accent-cesa-blue cursor-pointer outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cesa-blue">
+              <span class="inline-flex items-center gap-2 min-w-0">
+                <span class="inline-block w-2 h-2 rounded-full shrink-0 bg-success-200 animate-pulse asset-dot-live" aria-hidden="true"></span>
+                <span class="font-outfit font-light text-[16px] text-cesa-blue-dark">C4L <span class="sr-only">Activo</span></span>
+              </span>
+            </label>
+            <label for="asset-cesa" class="flex items-center gap-2 min-h-[44px] px-3 cursor-not-allowed opacity-50">
+              <input type="checkbox" id="asset-cesa" name="assets" value="cesa" disabled data-asset-label="CESA"
+                     class="w-5 h-5 accent-cesa-blue cursor-not-allowed outline-none">
+              <span class="inline-flex items-center gap-2 min-w-0">
+                <span class="inline-block w-2 h-2 rounded-full shrink-0 bg-warning-200" aria-hidden="true"></span>
+                <span class="font-outfit font-light text-[16px] text-cesa-blue-dark">CESA <span class="sr-only">Inactivo</span> <span class="text-[14px] md:text-[12px] text-neutral-600">· Próximamente</span></span>
+              </span>
+            </label>
+          </div>
+        </div>
+          <!-- Atoms/_FreshnessBadge como disparador del popover «Sobre los datos» (mismo patrón group que los «¿De dónde sale?») -->
+          <span class="group relative inline-flex w-full md:w-auto">
+          <div aria-live="polite" class="flex-1 md:flex-none">
+          <div data-state="default empty-week">
+            <span class="inline-flex items-center gap-1.5 px-2 py-1 rounded-[4px] border border-neutral-300 bg-white text-base font-light leading-[1.3] w-full md:w-fit cursor-default focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cesa-blue" role="status" tabindex="0" aria-describedby="source-tablero">
+              <span class="text-neutral-600">Última actualización 01/11/2026 14:35</span>
+            </span>
+          </div>
+          <div data-state="source-error">
+            <span class="inline-flex items-center gap-1.5 px-2 py-1 rounded-[4px] border border-cesa-orange bg-warning-alpha-10 text-base font-light leading-[1.3] w-full md:w-fit cursor-default focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cesa-blue" role="status" tabindex="0" aria-describedby="source-tablero">
+              <span class="inline-flex items-center justify-center w-5 h-5 shrink-0"><img src="../assets/images/svg/IconWarning.svg" alt="" class="w-4 h-4 shrink-0" aria-hidden="true"></span>
+              <span class="text-primary-azul-004">Última actualización conocida: 01/11/2026 09:15</span>
+            </span>
+          </div>
+          <div data-state="loading">
+            <span class="inline-flex items-center gap-1.5 px-2 py-1 rounded-[4px] border border-neutral-300 bg-white text-base font-light leading-[1.3] w-full md:w-fit cursor-default focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cesa-blue" role="status" tabindex="0" aria-describedby="source-tablero">
+              <span class="text-neutral-600">Actualizando…</span>
+            </span>
+          </div>
+          <div id="source-tablero" role="tooltip" class="hidden border border-white/20 group-hover:block group-focus:block group-focus-within:block absolute top-[calc(100%+4px)] right-0 z-50 bg-cesa-blue-dark text-neutral-100 font-outfit font-light text-[14px] md:text-xs leading-[1.4] md:leading-[1.3] px-3 py-3 md:py-2 rounded-xs w-[280px] max-w-[calc(100vw-32px)] text-left">El tablero lee la base Métricas de Notion, que una tarea programada actualiza cada semana con datos de Amplitude (incluidos Google Ads y Meta Ads cuando estén conectados), de la base de C4L y del Tracker y el triage en Notion. Cada valor guarda fecha, fuente y fórmula. Ventana fija de 1 semana. Las cifras se comparan siempre contra la semana anterior.</div>
+          </span>
+
+      </div>
+    </div>
+  </header>
+
+  <!-- ====================================================================
+       MAIN
+       ==================================================================== -->
+  <main data-screen="general-dashboard" class="flex-1 min-w-0 px-4 md:px-6 py-3">
+    <div class="max-w-[1440px] mx-auto w-full">
+
+
+      <!-- Contenido: fila de pestañas (izquierda) + semana (derecha) y paneles en cuadrícula de tarjetas blancas sobre el fondo de página -->
+      <section aria-label="Contenido del dashboard">
+        <div class="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
+          <!-- Tabs según Figma Tab group 467-5113 (underline). El partial _TabGroup de producción difiere (font-medium, inactivas neutral-600, sin fondo seleccionado): alinear en el PR. -->
+          <div class="flex w-full md:w-auto items-end bg-white rounded-t-[4px] border-b border-neutral-400" role="tablist" aria-label="Vistas del dashboard">
+            <button type="button" role="tab" id="tab-general" aria-selected="true" aria-controls="panel-general" data-tab="general" data-track="cambiar-pestana"
+                    class="inline-flex flex-1 md:flex-none items-center justify-center min-w-0 md:min-w-[150px] p-3 gap-2 rounded-t-[4px] font-outfit font-light text-[16px] leading-[1.3] whitespace-nowrap text-cesa-blue cursor-pointer transition-colors -mb-px bg-neutral-100 border-b-2 border-cesa-blue focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cesa-blue">
+              <span class="font-outfit">General</span>
+            </button>
+            <button type="button" role="tab" id="tab-levers" aria-selected="false" aria-controls="panel-levers" data-tab="levers" data-track="cambiar-pestana" tabindex="-1"
+                    class="inline-flex flex-1 md:flex-none items-center justify-center min-w-0 md:min-w-[150px] p-3 gap-2 rounded-t-[4px] font-outfit font-light text-[16px] leading-[1.3] whitespace-nowrap text-cesa-blue cursor-pointer transition-colors -mb-px bg-white border-b border-neutral-400 hover:bg-neutral-100 hover:border-cesa-blue focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cesa-blue">
+              <span class="font-outfit">Palancas</span>
+            </button>
+            <button type="button" role="tab" id="tab-tracking" aria-selected="false" aria-controls="panel-tracking" data-tab="tracking" data-track="cambiar-pestana" tabindex="-1"
+                    class="inline-flex flex-1 md:flex-none items-center justify-center min-w-0 md:min-w-[150px] p-3 gap-2 rounded-t-[4px] font-outfit font-light text-[16px] leading-[1.3] whitespace-nowrap text-cesa-blue cursor-pointer transition-colors -mb-px bg-white border-b border-neutral-400 hover:bg-neutral-100 hover:border-cesa-blue focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cesa-blue">
+              <span class="font-outfit">Seguimiento</span>
+            </button>
+          </div>
+          <p id="week-range-title" class="font-outfit font-light text-[14px] leading-[1.3] text-cesa-blue-dark pb-2">Semana del 27/10/2026 al 02/11/2026 · vs. semana anterior 20/10/2026 – 26/10/2026</p>
+        </div>
+        <div class="pt-1 flex flex-col">
+      <!-- ================================================================
+           PESTAÑA GENERAL — ¿La célula está generando valor para el negocio?
+           ================================================================ -->
+      <section id="panel-general" role="tabpanel" aria-labelledby="tab-general" tabindex="0" data-tab-panel="general"
+               class="focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cesa-blue">
+        <h2 class="sr-only">General</h2>
+        <div class="flex flex-col gap-2">
+
+        <!-- Cabecera narrativa (DEC-REP-43-050): misma jerarquía que los encabezados de Palancas y Seguimiento; count-up sobre las cifras -->
+        <div class="flex items-stretch gap-3 min-w-0" data-block="titular">
+          <div class="shrink-0 self-stretch w-1.5 bg-cesa-blue rounded-[2px]" aria-hidden="true"></div>
+          <div class="flex flex-col gap-1 min-w-0">
+            <div data-state="default">
+              <h2 class="font-outfit font-semibold text-[24px] leading-tight text-cesa-blue-dark m-0">Esta semana la célula atendió <strong class="font-bold text-cesa-blue tabular-nums">23 reportes</strong>, el <strong class="font-bold text-cesa-blue tabular-nums">61 %</strong> resueltos por el Golem. La conversión del mes fue <strong class="font-bold text-cesa-blue tabular-nums">3,8 %</strong> y el CAC bajó a <strong class="font-bold text-cesa-blue tabular-nums">COP $ 412.000</strong>.</h2>
+            </div>
+            <div data-state="empty-week">
+              <h2 class="font-outfit font-semibold text-[24px] leading-tight text-cesa-blue-dark m-0">Esta semana todavía no hay datos consolidados.</h2>
+            </div>
+            <div data-state="source-error">
+              <div class="flex flex-col items-center text-center gap-3 py-6 px-4 rounded-[4px] border border-neutral-200 bg-neutral-0" role="alert">
+                <p class="font-outfit font-light text-base leading-[1.3] text-neutral-600 max-w-md m-0">No pudimos leer la fuente de métricas. Intenta de nuevo.</p>
+                <button type="button" data-retry data-track="reintentar"
+                        class="max-w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 min-h-[44px] rounded-[2px] font-outfit font-light text-[16px] leading-[16px] cursor-pointer transition-colors border border-cesa-blue bg-transparent text-cesa-blue hover:bg-neutral-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cesa-blue">
+                  <span class="min-w-0 truncate whitespace-nowrap py-[3px]">Reintentar</span>
+                </button>
+              </div>
+            </div>
+            <div data-state="loading">
+              <div class="flex flex-col gap-2" aria-hidden="true">
+                <div class="rounded-[4px] w-full h-6 bg-neutral-200 motion-safe:animate-skeleton-pulse"></div>
+                <div class="rounded-[4px] w-2/3 h-6 bg-neutral-200 motion-safe:animate-skeleton-pulse"></div>
+              </div>
+              <p class="sr-only" role="status">Cargando lectura de la semana…</p>
+            </div>
+            <p id="headline-question" class="font-outfit font-light text-[14px] leading-[1.3] text-cesa-blue-dark m-0">¿La célula está generando valor para el negocio?</p>
+          </div>
+        </div>
+
+        <!-- Salud de los activos (DEC-REP-43-036) como tabla (DEC-REP-43-050); en móvil las filas se apilan (CSS del wireframe) -->
+        <section class="bg-white rounded-[4px] shadow-sm hover:shadow-md transition-shadow p-4 flex flex-col gap-2" aria-labelledby="health-title" data-block="salud-activos">
+          <div class="flex items-center gap-1">
+            <h3 id="health-title" class="font-outfit font-semibold text-[16px] leading-[1.3] text-cesa-blue-dark m-0">Salud de los activos</h3>
+            <span class="group relative inline-flex">
+                <button type="button" class="inline-flex items-center justify-center w-5 h-5 rounded-full text-neutral-600 hover:text-cesa-blue cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cesa-blue hit-44" aria-label="¿De dónde sale Salud de los activos?" aria-describedby="source-salud" data-track="de-donde-sale"><svg viewBox="0 0 24 24" fill="currentColor" class="w-4 h-4" aria-hidden="true"><path d="M12 2.25C10.0716 2.25 8.18657 2.82183 6.58319 3.89317C4.97982 4.96451 3.73013 6.48726 2.99218 8.26884C2.25422 10.0504 2.06114 12.0108 2.43735 13.9021C2.81355 15.7934 3.74215 17.5307 5.10571 18.8943C6.46928 20.2579 8.20656 21.1865 10.0979 21.5627C11.9892 21.9389 13.9496 21.7458 15.7312 21.0078C17.5127 20.2699 19.0355 19.0202 20.1068 17.4168C21.1782 15.8134 21.75 13.9284 21.75 12C21.7473 9.41498 20.7192 6.93661 18.8913 5.10872C17.0634 3.28084 14.585 2.25273 12 2.25ZM12 20.25C10.3683 20.25 8.77326 19.7661 7.41655 18.8596C6.05984 17.9531 5.00242 16.6646 4.378 15.1571C3.75358 13.6496 3.5902 11.9908 3.90853 10.3905C4.22685 8.79016 5.01259 7.32015 6.16637 6.16637C7.32016 5.01259 8.79017 4.22685 10.3905 3.90852C11.9909 3.59019 13.6497 3.75357 15.1571 4.37799C16.6646 5.00242 17.9531 6.05984 18.8596 7.41655C19.7661 8.77325 20.25 10.3683 20.25 12C20.2475 14.1873 19.3775 16.2843 17.8309 17.8309C16.2843 19.3775 14.1873 20.2475 12 20.25ZM13.5 16.5C13.5 16.6989 13.421 16.8897 13.2803 17.0303C13.1397 17.171 12.9489 17.25 12.75 17.25C12.3522 17.25 11.9706 17.092 11.6893 16.8107C11.408 16.5294 11.25 16.1478 11.25 15.75V12C11.0511 12 10.8603 11.921 10.7197 11.7803C10.579 11.6397 10.5 11.4489 10.5 11.25C10.5 11.0511 10.579 10.8603 10.7197 10.7197C10.8603 10.579 11.0511 10.5 11.25 10.5C11.6478 10.5 12.0294 10.658 12.3107 10.9393C12.592 11.2206 12.75 11.6022 12.75 12V15.75C12.9489 15.75 13.1397 15.829 13.2803 15.9697C13.421 16.1103 13.5 16.3011 13.5 16.5ZM10.5 7.875C10.5 7.6525 10.566 7.43499 10.6896 7.24998C10.8132 7.06498 10.9889 6.92078 11.1945 6.83564C11.4001 6.75049 11.6263 6.72821 11.8445 6.77162C12.0627 6.81502 12.2632 6.92217 12.4205 7.0795C12.5778 7.23684 12.685 7.43729 12.7284 7.65552C12.7718 7.87375 12.7495 8.09995 12.6644 8.30552C12.5792 8.51109 12.435 8.68679 12.25 8.8104C12.065 8.93402 11.8475 9 11.625 9C11.3266 9 11.0405 8.88147 10.8295 8.6705C10.6185 8.45952 10.5 8.17337 10.5 7.875Z"/></svg></button>
+                <div id="source-salud" role="tooltip" class="hidden border border-white/20 group-hover:block group-focus:block group-focus-within:block absolute top-[calc(100%+4px)] left-0 z-50 bg-cesa-blue-dark text-neutral-100 font-outfit font-light text-[14px] md:text-xs leading-[1.4] md:leading-[1.3] px-3 py-3 md:py-2 rounded-xs w-[280px] max-w-[calc(100vw-32px)] text-left">
+                    <p class="m-0"><span class="font-medium">Qué es:</span> disponibilidad y cumplimiento del estándar de servicio de cada activo.</p>
+                    <p class="m-0 mt-1"><span class="font-medium">Fórmula:</span> uptime = minutos en línea ÷ minutos de la semana; estándar = básicos que cumplen el umbral definido.</p>
+                    <p class="m-0 mt-1"><span class="font-medium">Fuente:</span> monitor de disponibilidad (por definir), Sentry (incidentes), Lighthouse del repo (performance).</p>
+                    <p class="m-0 mt-1"><span class="font-medium">Frecuencia:</span> semanal; en línea en tiempo real.</p>
+                    <p class="m-0 mt-1"><span class="font-medium">Modo:</span> automático.</p>
+                    <p class="m-0 mt-1"><span class="font-medium">Activo:</span> C4L.</p>
+                </div>
+              </span>
+          </div>
+          <div data-state="default empty-week">
+            <table class="w-full border-collapse text-left" data-table="salud">
+              <caption class="sr-only">Estado, uptime, incidentes y estándar de servicio por activo</caption>
+              <thead>
+                <tr class="border-b border-neutral-200">
+                  <th scope="col" class="font-outfit font-light text-[12px] leading-[1.3] uppercase tracking-wide text-neutral-600 pb-1 pr-3 whitespace-nowrap">Activo</th>
+                  <th scope="col" class="font-outfit font-light text-[12px] leading-[1.3] uppercase tracking-wide text-neutral-600 pb-1 px-3 whitespace-nowrap">Estado</th>
+                  <th scope="col" class="font-outfit font-light text-[12px] leading-[1.3] uppercase tracking-wide text-neutral-600 pb-1 px-3 whitespace-nowrap">Uptime 7 días</th>
+                  <th scope="col" class="font-outfit font-light text-[12px] leading-[1.3] uppercase tracking-wide text-neutral-600 pb-1 px-3 whitespace-nowrap">Incidentes</th>
+                  <th scope="col" class="font-outfit font-light text-[12px] leading-[1.3] uppercase tracking-wide text-neutral-600 pb-1 px-3 whitespace-nowrap">Performance</th>
+                  <th scope="col" class="font-outfit font-light text-[12px] leading-[1.3] uppercase tracking-wide text-neutral-600 pb-1 px-3 whitespace-nowrap">SEO</th>
+                  <th scope="col" class="font-outfit font-light text-[12px] leading-[1.3] uppercase tracking-wide text-neutral-600 pb-1 px-3 whitespace-nowrap">Accesibilidad</th>
+                  <th scope="col" class="font-outfit font-light text-[12px] leading-[1.3] uppercase tracking-wide text-neutral-600 pb-1 pl-3 whitespace-nowrap">Seguridad</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr class="border-b border-neutral-200" data-asset-health="c4l">
+                  <th scope="row" class="font-outfit font-semibold text-[14px] leading-[1.3] text-cesa-blue-dark py-2 pr-3 align-middle">C4L</th>
+                  <td data-label="Estado" class="py-2 px-3 align-middle"><span class="inline-flex items-center gap-2 font-outfit font-light text-[14px] leading-[1.3] text-neutral-600"><span class="inline-block w-2 h-2 rounded-full shrink-0 bg-success-200 animate-pulse asset-dot-live" aria-hidden="true"></span>En línea</span></td>
+                  <td data-label="Uptime 7 días" class="font-outfit font-medium text-[14px] leading-[1.3] tabular-nums text-cesa-blue-dark py-2 px-3 align-middle">99,8 %</td>
+                  <td data-label="Incidentes" class="font-outfit font-medium text-[14px] leading-[1.3] tabular-nums text-cesa-blue-dark py-2 px-3 align-middle">0</td>
+                  <td data-label="Performance" class="py-2 px-3 align-middle"><span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full border text-[12px] font-outfit font-light leading-[1.3] whitespace-nowrap border-success-200 text-success-contrast"><span class="inline-flex items-center justify-center w-4 h-4 shrink-0"><svg viewBox="0 0 512 512" fill="currentColor" class="w-3 h-3" aria-hidden="true"><path d="M256 48a208 208 0 1 1 0 416 208 208 0 1 1 0-416zm0 464A256 256 0 1 0 256 0a256 256 0 1 0 0 512zM369 209c9.4-9.4 9.4-24.6 0-33.9s-24.6-9.4-33.9 0l-111 111-47-47c-9.4-9.4-24.6-9.4-33.9 0s-9.4 24.6 0 33.9l64 64c9.4 9.4 24.6 9.4 33.9 0L369 209z"/></svg></span>Cumple</span></td>
+                  <td data-label="SEO" class="py-2 px-3 align-middle"><span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full border text-[12px] font-outfit font-light leading-[1.3] whitespace-nowrap border-success-200 text-success-contrast"><span class="inline-flex items-center justify-center w-4 h-4 shrink-0"><svg viewBox="0 0 512 512" fill="currentColor" class="w-3 h-3" aria-hidden="true"><path d="M256 48a208 208 0 1 1 0 416 208 208 0 1 1 0-416zm0 464A256 256 0 1 0 256 0a256 256 0 1 0 0 512zM369 209c9.4-9.4 9.4-24.6 0-33.9s-24.6-9.4-33.9 0l-111 111-47-47c-9.4-9.4-24.6-9.4-33.9 0s-9.4 24.6 0 33.9l64 64c9.4 9.4 24.6 9.4 33.9 0L369 209z"/></svg></span>Cumple</span></td>
+                  <td data-label="Accesibilidad" class="py-2 px-3 align-middle"><span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full border text-[12px] font-outfit font-light leading-[1.3] whitespace-nowrap border-error-200 text-error-200"><span class="inline-flex items-center justify-center w-4 h-4 shrink-0"><svg viewBox="0 0 512 512" fill="currentColor" class="w-3 h-3" aria-hidden="true"><path d="M256 48a208 208 0 1 1 0 416 208 208 0 1 1 0-416zm0 464A256 256 0 1 0 256 0a256 256 0 1 0 0 512zM175 175c-9.4 9.4-9.4 24.6 0 33.9l47 47-47 47c-9.4 9.4-9.4 24.6 0 33.9s24.6 9.4 33.9 0l47-47 47 47c9.4 9.4 24.6 9.4 33.9 0s9.4-24.6 0-33.9l-47-47 47-47c9.4-9.4 9.4-24.6 0-33.9s-24.6-9.4-33.9 0l-47 47-47-47c-9.4-9.4-24.6-9.4-33.9 0z"/></svg></span>No cumple</span></td>
+                  <td data-label="Seguridad" class="py-2 pl-3 align-middle"><span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full border text-[12px] font-outfit font-light leading-[1.3] whitespace-nowrap border-success-200 text-success-contrast"><span class="inline-flex items-center justify-center w-4 h-4 shrink-0"><svg viewBox="0 0 512 512" fill="currentColor" class="w-3 h-3" aria-hidden="true"><path d="M256 48a208 208 0 1 1 0 416 208 208 0 1 1 0-416zm0 464A256 256 0 1 0 256 0a256 256 0 1 0 0 512zM369 209c9.4-9.4 9.4-24.6 0-33.9s-24.6-9.4-33.9 0l-111 111-47-47c-9.4-9.4-24.6-9.4-33.9 0s-9.4 24.6 0 33.9l64 64c9.4 9.4 24.6 9.4 33.9 0L369 209z"/></svg></span>Cumple</span></td>
+                </tr>
+                <tr class="text-neutral-600" data-asset-health="cesa" aria-disabled="true">
+                  <th scope="row" class="font-outfit font-semibold text-[14px] leading-[1.3] py-2 pr-3 align-middle">CESA web</th>
+                  <td data-label="Estado" class="py-2 px-3 align-middle"><span class="inline-flex items-center gap-2 font-outfit font-light text-[14px] leading-[1.3]"><span class="inline-block w-2 h-2 rounded-full shrink-0 bg-warning-200" aria-hidden="true"></span>Próximamente</span></td>
+                  <td data-label="Uptime 7 días" class="font-outfit font-light text-[14px] leading-[1.3] py-2 px-3 align-middle">—</td>
+                  <td data-label="Incidentes" class="font-outfit font-light text-[14px] leading-[1.3] py-2 px-3 align-middle">—</td>
+                  <td data-label="Performance" class="font-outfit font-light text-[14px] leading-[1.3] py-2 px-3 align-middle">—</td>
+                  <td data-label="SEO" class="font-outfit font-light text-[14px] leading-[1.3] py-2 px-3 align-middle">—</td>
+                  <td data-label="Accesibilidad" class="font-outfit font-light text-[14px] leading-[1.3] py-2 px-3 align-middle">—</td>
+                  <td data-label="Seguridad" class="font-outfit font-light text-[14px] leading-[1.3] py-2 pl-3 align-middle">—</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div data-state="source-error">
+            <div class="flex flex-col items-center text-center gap-3 py-6 px-4 rounded-[4px] border border-neutral-200 bg-neutral-0" role="alert">
+                <p class="font-outfit font-light text-base leading-[1.3] text-neutral-600 max-w-md m-0">Sin lectura de salud. Intenta de nuevo.</p>
+                <button type="button" data-retry data-track="reintentar"
+                        class="max-w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 min-h-[44px] rounded-[2px] font-outfit font-light text-[16px] leading-[16px] cursor-pointer transition-colors border border-cesa-blue bg-transparent text-cesa-blue hover:bg-neutral-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cesa-blue">
+                  <span class="min-w-0 truncate whitespace-nowrap py-[3px]">Reintentar</span>
+                </button>
+              </div>
+          </div>
+          <div data-state="loading">
+            <div class="flex flex-col gap-2" aria-hidden="true">
+              <div class="rounded-[4px] w-full h-4 bg-neutral-200 motion-safe:animate-skeleton-pulse"></div>
+              <div class="rounded-[4px] w-full h-6 bg-neutral-200 motion-safe:animate-skeleton-pulse"></div>
+              <div class="rounded-[4px] w-full h-6 bg-neutral-200 motion-safe:animate-skeleton-pulse"></div>
+            </div>
+            <p class="sr-only" role="status">Cargando salud de los activos…</p>
+          </div>
+        </section>
+
+        <!-- Chips de delta semánticos (DEC-REP-43-053): favorable = la métrica mejora en su propio sentido (Conversión, Recompra y reportes/Golem/persona mejoran al subir; CAC y tiempos de resolución mejoran al bajar) → `bg-success-50 text-success-contrast`; desfavorable → `bg-error-200 text-white` con la misma flecha + signo + texto. En el mock actual todas las métricas mejoran, así que la variante desfavorable queda definida aquí y en el <style>, sin instancia. -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+
+          <!-- Tile de métrica (DEC-REP-43-050): fondo sólido T1, sin borde, sombra ni ícono -->
+          <article class="bg-cesa-blue rounded-[4px] p-5 flex flex-col gap-2 text-white" data-card="conversion" data-tile="T1">
+            <div class="flex flex-col items-start gap-3">
+              <div class="flex flex-wrap items-center gap-2">
+                <div class="flex items-center gap-1">
+                  <h3 class="font-outfit font-medium text-[14px] leading-[1.3] text-white m-0">Conversión</h3>
+                  <span class="group relative inline-flex">
+                  <button type="button" class="inline-flex items-center justify-center w-5 h-5 rounded-full text-white hover:opacity-80 cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white hit-44" aria-label="¿De dónde sale Conversión?" aria-describedby="source-conversion" data-track="de-donde-sale"><svg viewBox="0 0 24 24" fill="currentColor" class="w-4 h-4" aria-hidden="true"><path d="M12 2.25C10.0716 2.25 8.18657 2.82183 6.58319 3.89317C4.97982 4.96451 3.73013 6.48726 2.99218 8.26884C2.25422 10.0504 2.06114 12.0108 2.43735 13.9021C2.81355 15.7934 3.74215 17.5307 5.10571 18.8943C6.46928 20.2579 8.20656 21.1865 10.0979 21.5627C11.9892 21.9389 13.9496 21.7458 15.7312 21.0078C17.5127 20.2699 19.0355 19.0202 20.1068 17.4168C21.1782 15.8134 21.75 13.9284 21.75 12C21.7473 9.41498 20.7192 6.93661 18.8913 5.10872C17.0634 3.28084 14.585 2.25273 12 2.25ZM12 20.25C10.3683 20.25 8.77326 19.7661 7.41655 18.8596C6.05984 17.9531 5.00242 16.6646 4.378 15.1571C3.75358 13.6496 3.5902 11.9908 3.90853 10.3905C4.22685 8.79016 5.01259 7.32015 6.16637 6.16637C7.32016 5.01259 8.79017 4.22685 10.3905 3.90852C11.9909 3.59019 13.6497 3.75357 15.1571 4.37799C16.6646 5.00242 17.9531 6.05984 18.8596 7.41655C19.7661 8.77325 20.25 10.3683 20.25 12C20.2475 14.1873 19.3775 16.2843 17.8309 17.8309C16.2843 19.3775 14.1873 20.2475 12 20.25ZM13.5 16.5C13.5 16.6989 13.421 16.8897 13.2803 17.0303C13.1397 17.171 12.9489 17.25 12.75 17.25C12.3522 17.25 11.9706 17.092 11.6893 16.8107C11.408 16.5294 11.25 16.1478 11.25 15.75V12C11.0511 12 10.8603 11.921 10.7197 11.7803C10.579 11.6397 10.5 11.4489 10.5 11.25C10.5 11.0511 10.579 10.8603 10.7197 10.7197C10.8603 10.579 11.0511 10.5 11.25 10.5C11.6478 10.5 12.0294 10.658 12.3107 10.9393C12.592 11.2206 12.75 11.6022 12.75 12V15.75C12.9489 15.75 13.1397 15.829 13.2803 15.9697C13.421 16.1103 13.5 16.3011 13.5 16.5ZM10.5 7.875C10.5 7.6525 10.566 7.43499 10.6896 7.24998C10.8132 7.06498 10.9889 6.92078 11.1945 6.83564C11.4001 6.75049 11.6263 6.72821 11.8445 6.77162C12.0627 6.81502 12.2632 6.92217 12.4205 7.0795C12.5778 7.23684 12.685 7.43729 12.7284 7.65552C12.7718 7.87375 12.7495 8.09995 12.6644 8.30552C12.5792 8.51109 12.435 8.68679 12.25 8.8104C12.065 8.93402 11.8475 9 11.625 9C11.3266 9 11.0405 8.88147 10.8295 8.6705C10.6185 8.45952 10.5 8.17337 10.5 7.875Z"/></svg></button>
+                  <div id="source-conversion" role="tooltip" class="hidden border border-white/20 group-hover:block group-focus:block group-focus-within:block absolute top-[calc(100%+4px)] left-0 z-50 bg-cesa-blue-dark text-neutral-100 font-outfit font-light text-[14px] md:text-xs leading-[1.4] md:leading-[1.3] px-3 py-3 md:py-2 rounded-xs w-[280px] max-w-[calc(100vw-32px)] text-left">
+                    <p class="m-0"><span class="font-medium">Qué es:</span> de cada 100 personas que vieron un curso, cuántas compraron.</p>
+                    <p class="m-0 mt-1"><span class="font-medium">Fórmula:</span> compras ÷ vistas de curso en la semana.</p>
+                    <p class="m-0 mt-1"><span class="font-medium">Fuente:</span> Amplitude, embudo ver curso → carrito → pago → compra.</p>
+                    <p class="m-0 mt-1"><span class="font-medium">Frecuencia:</span> mensual (ventana de 30 días), se refresca cada semana.</p>
+                    <p class="m-0 mt-1"><span class="font-medium">Modo:</span> automático.</p>
+                    <p class="m-0 mt-1"><span class="font-medium">Activo:</span> C4L.</p>
+                  </div>
+                </span>
+                </div>
+                <span class="font-outfit font-light text-[14px] md:text-[12px] leading-[1.3] text-neutral-100">Últimos 30 días</span>
+              </div>
+              <span class="group relative inline-flex">
+                <button type="button" class="inline-flex items-center gap-1 px-2 py-1 rounded-full border text-[14px] md:text-[12px] font-outfit font-light leading-[1.3] w-fit whitespace-nowrap border-white text-white cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white hit-44-chip-down" data-maturity="linea-base" aria-describedby="maturity-conversion-general">
+                <span class="inline-flex items-center justify-center w-4 h-4 shrink-0"><svg viewBox="0 0 24 24" fill="currentColor" class="w-3 h-3" aria-hidden="true"><path d="M12 2.25C10.0716 2.25 8.18657 2.82183 6.58319 3.89317C4.97982 4.96451 3.73013 6.48726 2.99218 8.26884C2.25422 10.0504 2.06114 12.0108 2.43735 13.9021C2.81355 15.7934 3.74215 17.5307 5.10571 18.8943C6.46928 20.2579 8.20656 21.1865 10.0979 21.5627C11.9892 21.9389 13.9496 21.7458 15.7312 21.0078C17.5127 20.2699 19.0355 19.0202 20.1068 17.4168C21.1782 15.8134 21.75 13.9284 21.75 12C21.7473 9.41498 20.7192 6.93661 18.8913 5.10872C17.0634 3.28084 14.585 2.25273 12 2.25ZM12 20.25C10.3683 20.25 8.77326 19.7661 7.41655 18.8596C6.05984 17.9531 5.00242 16.6646 4.378 15.1571C3.75358 13.6496 3.5902 11.9908 3.90853 10.3905C4.22685 8.79016 5.01259 7.32015 6.16637 6.16637C7.32016 5.01259 8.79017 4.22685 10.3905 3.90852C11.9909 3.59019 13.6497 3.75357 15.1571 4.37799C16.6646 5.00242 17.9531 6.05984 18.8596 7.41655C19.7661 8.77325 20.25 10.3683 20.25 12C20.2475 14.1873 19.3775 16.2843 17.8309 17.8309C16.2843 19.3775 14.1873 20.2475 12 20.25ZM13.5 16.5C13.5 16.6989 13.421 16.8897 13.2803 17.0303C13.1397 17.171 12.9489 17.25 12.75 17.25C12.3522 17.25 11.9706 17.092 11.6893 16.8107C11.408 16.5294 11.25 16.1478 11.25 15.75V12C11.0511 12 10.8603 11.921 10.7197 11.7803C10.579 11.6397 10.5 11.4489 10.5 11.25C10.5 11.0511 10.579 10.8603 10.7197 10.7197C10.8603 10.579 11.0511 10.5 11.25 10.5C11.6478 10.5 12.0294 10.658 12.3107 10.9393C12.592 11.2206 12.75 11.6022 12.75 12V15.75C12.9489 15.75 13.1397 15.829 13.2803 15.9697C13.421 16.1103 13.5 16.3011 13.5 16.5ZM10.5 7.875C10.5 7.6525 10.566 7.43499 10.6896 7.24998C10.8132 7.06498 10.9889 6.92078 11.1945 6.83564C11.4001 6.75049 11.6263 6.72821 11.8445 6.77162C12.0627 6.81502 12.2632 6.92217 12.4205 7.0795C12.5778 7.23684 12.685 7.43729 12.7284 7.65552C12.7718 7.87375 12.7495 8.09995 12.6644 8.30552C12.5792 8.51109 12.435 8.68679 12.25 8.8104C12.065 8.93402 11.8475 9 11.625 9C11.3266 9 11.0405 8.88147 10.8295 8.6705C10.6185 8.45952 10.5 8.17337 10.5 7.875Z"/></svg></span>
+                Línea base en consolidación
+                </button>
+                <div id="maturity-conversion-general" role="tooltip" class="hidden border border-white/20 group-hover:block group-focus:block group-focus-within:block absolute top-[calc(100%+4px)] right-0 z-50 bg-cesa-blue-dark text-neutral-100 font-outfit font-light text-[14px] md:text-xs leading-[1.4] md:leading-[1.3] px-3 py-3 md:py-2 rounded-xs w-[280px] max-w-[calc(100vw-32px)] text-left">
+                  <p class="m-0"><span class="font-medium">Qué es:</span> la métrica ya se mide cada semana, pero todavía no hay historia suficiente ni estable para tomarla como referencia firme. El valor se muestra; la comparación se lee con cautela.</p>
+                </div>
+              </span>
+            </div>
+            <div data-state="default">
+              <div class="flex flex-wrap items-end gap-2">
+                <p class="font-outfit font-bold text-4xl leading-none tracking-[-1px] tabular-nums text-white m-0">3,8 %</p>
+                <span class="inline-flex items-center gap-1 rounded-[4px] px-1.5 py-0.5 text-[14px] md:text-[12px] font-medium leading-none bg-success-50 text-success-contrast" data-delta="favorable"><span aria-hidden="true">▲</span><span class="sr-only">Sube</span> +0,4 pp</span>
+              </div>
+              <p class="font-outfit font-light text-[14px] md:text-[12px] leading-[1.3] text-neutral-100 m-0 mt-1">Comparado con 3,4 % el mes anterior</p>
+            </div>
+            <div data-state="empty-week">
+              <p class="font-outfit font-bold text-4xl leading-none tracking-[-1px] tabular-nums text-white m-0"><span aria-hidden="true">—</span><span class="sr-only">Sin valor</span></p>
+              <p class="font-outfit font-light text-[14px] md:text-[12px] leading-[1.3] text-neutral-100 m-0 mt-1">Sin datos en esta semana · comparado con 3,4 % el mes anterior</p>
+            </div>
+            <div data-state="source-error">
+              <div class="flex flex-col items-center text-center gap-3 py-6 px-4 rounded-[4px] border border-neutral-200 bg-neutral-0" role="alert">
+                <p class="font-outfit font-light text-base leading-[1.3] text-neutral-600 max-w-md m-0">No pudimos leer la fuente de métricas. Intenta de nuevo.</p>
+                <button type="button" data-retry data-track="reintentar"
+                        class="max-w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 min-h-[44px] rounded-[2px] font-outfit font-light text-[16px] leading-[16px] cursor-pointer transition-colors border border-cesa-blue bg-transparent text-cesa-blue hover:bg-neutral-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cesa-blue">
+                  <span class="min-w-0 truncate whitespace-nowrap py-[3px]">Reintentar</span>
+                </button>
+              </div>
+            </div>
+            <div data-state="loading">
+              <div class="flex flex-col gap-2" aria-hidden="true">
+                <div class="rounded-[4px] w-1/2 h-8 bg-neutral-200 motion-safe:animate-skeleton-pulse"></div>
+                <div class="rounded-[4px] w-2/3 h-4 bg-neutral-200 motion-safe:animate-skeleton-pulse"></div>
+              </div>
+              <p class="sr-only" role="status">Cargando Conversión…</p>
+            </div>
+          </article>
+
+          <!-- Tile de métrica (DEC-REP-43-050): fondo sólido T2, sin borde, sombra ni ícono -->
+          <article class="bg-primary-azul-002 rounded-[4px] p-5 flex flex-col gap-2 text-white" data-card="cac" data-tile="T2">
+            <div class="flex flex-col items-start gap-3">
+              <div class="flex flex-wrap items-center gap-2">
+                <div class="flex items-center gap-1">
+                  <h3 class="font-outfit font-medium text-[14px] leading-[1.3] text-white m-0">CAC</h3>
+                  <span class="group relative inline-flex">
+                  <button type="button" class="inline-flex items-center justify-center w-5 h-5 rounded-full text-white hover:opacity-80 cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white hit-44" aria-label="¿De dónde sale CAC?" aria-describedby="source-cac-general" data-track="de-donde-sale"><svg viewBox="0 0 24 24" fill="currentColor" class="w-4 h-4" aria-hidden="true"><path d="M12 2.25C10.0716 2.25 8.18657 2.82183 6.58319 3.89317C4.97982 4.96451 3.73013 6.48726 2.99218 8.26884C2.25422 10.0504 2.06114 12.0108 2.43735 13.9021C2.81355 15.7934 3.74215 17.5307 5.10571 18.8943C6.46928 20.2579 8.20656 21.1865 10.0979 21.5627C11.9892 21.9389 13.9496 21.7458 15.7312 21.0078C17.5127 20.2699 19.0355 19.0202 20.1068 17.4168C21.1782 15.8134 21.75 13.9284 21.75 12C21.7473 9.41498 20.7192 6.93661 18.8913 5.10872C17.0634 3.28084 14.585 2.25273 12 2.25ZM12 20.25C10.3683 20.25 8.77326 19.7661 7.41655 18.8596C6.05984 17.9531 5.00242 16.6646 4.378 15.1571C3.75358 13.6496 3.5902 11.9908 3.90853 10.3905C4.22685 8.79016 5.01259 7.32015 6.16637 6.16637C7.32016 5.01259 8.79017 4.22685 10.3905 3.90852C11.9909 3.59019 13.6497 3.75357 15.1571 4.37799C16.6646 5.00242 17.9531 6.05984 18.8596 7.41655C19.7661 8.77325 20.25 10.3683 20.25 12C20.2475 14.1873 19.3775 16.2843 17.8309 17.8309C16.2843 19.3775 14.1873 20.2475 12 20.25ZM13.5 16.5C13.5 16.6989 13.421 16.8897 13.2803 17.0303C13.1397 17.171 12.9489 17.25 12.75 17.25C12.3522 17.25 11.9706 17.092 11.6893 16.8107C11.408 16.5294 11.25 16.1478 11.25 15.75V12C11.0511 12 10.8603 11.921 10.7197 11.7803C10.579 11.6397 10.5 11.4489 10.5 11.25C10.5 11.0511 10.579 10.8603 10.7197 10.7197C10.8603 10.579 11.0511 10.5 11.25 10.5C11.6478 10.5 12.0294 10.658 12.3107 10.9393C12.592 11.2206 12.75 11.6022 12.75 12V15.75C12.9489 15.75 13.1397 15.829 13.2803 15.9697C13.421 16.1103 13.5 16.3011 13.5 16.5ZM10.5 7.875C10.5 7.6525 10.566 7.43499 10.6896 7.24998C10.8132 7.06498 10.9889 6.92078 11.1945 6.83564C11.4001 6.75049 11.6263 6.72821 11.8445 6.77162C12.0627 6.81502 12.2632 6.92217 12.4205 7.0795C12.5778 7.23684 12.685 7.43729 12.7284 7.65552C12.7718 7.87375 12.7495 8.09995 12.6644 8.30552C12.5792 8.51109 12.435 8.68679 12.25 8.8104C12.065 8.93402 11.8475 9 11.625 9C11.3266 9 11.0405 8.88147 10.8295 8.6705C10.6185 8.45952 10.5 8.17337 10.5 7.875Z"/></svg></button>
+                  <div id="source-cac-general" role="tooltip" class="hidden border border-white/20 group-hover:block group-focus:block group-focus-within:block absolute top-[calc(100%+4px)] left-0 z-50 bg-cesa-blue-dark text-neutral-100 font-outfit font-light text-[14px] md:text-xs leading-[1.4] md:leading-[1.3] px-3 py-3 md:py-2 rounded-xs w-[280px] max-w-[calc(100vw-32px)] text-left">
+                    <p class="m-0"><span class="font-medium">Qué es:</span> cuánto costó traer a cada cliente nuevo.</p>
+                    <p class="m-0 mt-1"><span class="font-medium">Fórmula:</span> inversión de la semana en campañas C4L_ ÷ todos los compradores nuevos de la semana (CAC combinado: vengan de pauta u orgánico), en pesos con la tasa del período.</p>
+                    <p class="m-0 mt-1"><span class="font-medium">Fuente:</span> Meta Ads vía Amplitude (Google Ads solo para CESA web); compradores nuevos desde la base de C4L.</p>
+                    <p class="m-0 mt-1"><span class="font-medium">Frecuencia:</span> semanal.</p>
+                    <p class="m-0 mt-1"><span class="font-medium">Modo:</span> automático cuando Amplitude tenga la fuente conectada; mientras tanto carga manual en Notion.</p>
+                    <p class="m-0 mt-1"><span class="font-medium">Activo:</span> C4L (inversión de campañas C4L_ en Meta Ads vía Amplitude; Google Ads solo CESA web).</p>
+                  </div>
+                </span>
+                </div>
+                <span class="font-outfit font-light text-[14px] md:text-[12px] leading-[1.3] text-neutral-100">Esta semana · menor es mejor</span>
+              </div>
+              <span class="group relative inline-flex">
+                <button type="button" class="inline-flex items-center gap-1 px-2 py-1 rounded-full border text-[14px] md:text-[12px] font-outfit font-light leading-[1.3] w-fit whitespace-nowrap border-white text-white cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white hit-44-chip-down" data-maturity="medicion-activa" aria-describedby="maturity-cac-general">
+                <span class="inline-flex items-center justify-center w-4 h-4 shrink-0"><svg viewBox="0 0 18 18" fill="currentColor" class="w-3 h-3" aria-hidden="true"><path d="M12.2105 6.91453C12.2628 6.96677 12.3043 7.02881 12.3326 7.0971C12.3609 7.16538 12.3754 7.23858 12.3754 7.3125C12.3754 7.38642 12.3609 7.45962 12.3326 7.5279C12.3043 7.59619 12.2628 7.65823 12.2105 7.71047L8.27297 11.648C8.22073 11.7003 8.15869 11.7418 8.09041 11.7701C8.02212 11.7984 7.94892 11.8129 7.875 11.8129C7.80108 11.8129 7.72789 11.7984 7.6596 11.7701C7.59131 11.7418 7.52928 11.7003 7.47703 11.648L5.78953 9.96047C5.68399 9.85492 5.62469 9.71177 5.62469 9.5625C5.62469 9.41323 5.68399 9.27008 5.78953 9.16453C5.89508 9.05898 6.03824 8.99969 6.1875 8.99969C6.33677 8.99969 6.47992 9.05898 6.58547 9.16453L7.875 10.4548L11.4145 6.91453C11.4668 6.86223 11.5288 6.82074 11.5971 6.79244C11.6654 6.76413 11.7386 6.74956 11.8125 6.74956C11.8864 6.74956 11.9596 6.76413 12.0279 6.79244C12.0962 6.82074 12.1582 6.86223 12.2105 6.91453ZM16.3125 9C16.3125 10.4463 15.8836 11.8601 15.0801 13.0626C14.2766 14.2651 13.1346 15.2024 11.7984 15.7559C10.4622 16.3093 8.99189 16.4541 7.57341 16.172C6.15492 15.8898 4.85196 15.1934 3.82928 14.1707C2.80661 13.148 2.11017 11.8451 1.82801 10.4266C1.54586 9.00811 1.69067 7.53781 2.24413 6.20163C2.7976 4.86544 3.73486 3.72339 4.9374 2.91988C6.13993 2.11637 7.55373 1.6875 9 1.6875C10.9388 1.68955 12.7975 2.46063 14.1685 3.83154C15.5394 5.20246 16.3105 7.06123 16.3125 9ZM15.1875 9C15.1875 7.77623 14.8246 6.57994 14.1447 5.56241C13.4648 4.54488 12.4985 3.75181 11.3679 3.2835C10.2372 2.81518 8.99314 2.69265 7.79288 2.93139C6.59262 3.17014 5.49012 3.75944 4.62478 4.62478C3.75944 5.49011 3.17014 6.59262 2.93139 7.79288C2.69265 8.99314 2.81518 10.2372 3.2835 11.3679C3.75182 12.4985 4.54488 13.4648 5.56241 14.1447C6.57994 14.8246 7.77623 15.1875 9 15.1875C10.6405 15.1856 12.2132 14.5331 13.3732 13.3732C14.5331 12.2132 15.1856 10.6405 15.1875 9Z"/></svg></span>
+                Medición activa
+                </button>
+                <div id="maturity-cac-general" role="tooltip" class="hidden border border-white/20 group-hover:block group-focus:block group-focus-within:block absolute top-[calc(100%+4px)] right-0 z-50 bg-cesa-blue-dark text-neutral-100 font-outfit font-light text-[14px] md:text-xs leading-[1.4] md:leading-[1.3] px-3 py-3 md:py-2 rounded-xs w-[280px] max-w-[calc(100vw-32px)] text-left">
+                  <p class="m-0"><span class="font-medium">Qué es:</span> la métrica se mide cada semana con fuente y fórmula definidas y ya tiene línea base. La comparación contra la semana anterior es válida.</p>
+                </div>
+              </span>
+            </div>
+            <div data-state="default">
+              <div class="flex flex-wrap items-end gap-2">
+                <p class="font-outfit font-bold text-4xl leading-none tracking-[-1px] tabular-nums text-white m-0"><span class="text-[14px] font-light text-neutral-100">COP $</span> 412.000</p>
+                <span class="inline-flex items-center gap-1 rounded-[4px] px-1.5 py-0.5 text-[14px] md:text-[12px] font-medium leading-none bg-success-50 text-success-contrast" data-delta="favorable"><span aria-hidden="true">▼</span><span class="sr-only">Baja</span> −COP $ 23.000</span>
+              </div>
+              <p class="font-outfit font-light text-[14px] md:text-[12px] leading-[1.3] text-neutral-100 m-0 mt-1">Comparado con COP $ 435.000 la semana anterior</p>
+            </div>
+            <div data-state="empty-week">
+              <p class="font-outfit font-bold text-4xl leading-none tracking-[-1px] tabular-nums text-white m-0"><span aria-hidden="true">—</span><span class="sr-only">Sin valor</span></p>
+              <p class="font-outfit font-light text-[14px] md:text-[12px] leading-[1.3] text-neutral-100 m-0 mt-1">Sin datos en esta semana · comparado con COP $ 435.000 la semana anterior</p>
+            </div>
+            <div data-state="source-error">
+              <div class="flex flex-col items-center text-center gap-3 py-6 px-4 rounded-[4px] border border-neutral-200 bg-neutral-0" role="alert">
+                <p class="font-outfit font-light text-base leading-[1.3] text-neutral-600 max-w-md m-0">No pudimos leer la fuente de métricas. Intenta de nuevo.</p>
+                <button type="button" data-retry data-track="reintentar"
+                        class="max-w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 min-h-[44px] rounded-[2px] font-outfit font-light text-[16px] leading-[16px] cursor-pointer transition-colors border border-cesa-blue bg-transparent text-cesa-blue hover:bg-neutral-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cesa-blue">
+                  <span class="min-w-0 truncate whitespace-nowrap py-[3px]">Reintentar</span>
+                </button>
+              </div>
+            </div>
+            <div data-state="loading">
+              <div class="flex flex-col gap-2" aria-hidden="true">
+                <div class="rounded-[4px] w-1/2 h-8 bg-neutral-200 motion-safe:animate-skeleton-pulse"></div>
+                <div class="rounded-[4px] w-2/3 h-4 bg-neutral-200 motion-safe:animate-skeleton-pulse"></div>
+              </div>
+              <p class="sr-only" role="status">Cargando CAC…</p>
+            </div>
+          </article>
+
+          <!-- Tile de métrica (DEC-REP-43-050): fondo sólido T3, sin borde, sombra ni ícono -->
+          <article class="bg-primary-azul-003 rounded-[4px] p-5 flex flex-col gap-2 text-white" data-card="recompra" data-tile="T3">
+            <div class="flex flex-col items-start gap-3">
+              <div class="flex flex-wrap items-center gap-2">
+                <div class="flex items-center gap-1">
+                  <h3 class="font-outfit font-medium text-[14px] leading-[1.3] text-white m-0">Recompra</h3>
+                  <span class="group relative inline-flex">
+                  <button type="button" class="inline-flex items-center justify-center w-5 h-5 rounded-full text-white hover:opacity-80 cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white hit-44" aria-label="¿De dónde sale Recompra?" aria-describedby="source-recompra" data-track="de-donde-sale"><svg viewBox="0 0 24 24" fill="currentColor" class="w-4 h-4" aria-hidden="true"><path d="M12 2.25C10.0716 2.25 8.18657 2.82183 6.58319 3.89317C4.97982 4.96451 3.73013 6.48726 2.99218 8.26884C2.25422 10.0504 2.06114 12.0108 2.43735 13.9021C2.81355 15.7934 3.74215 17.5307 5.10571 18.8943C6.46928 20.2579 8.20656 21.1865 10.0979 21.5627C11.9892 21.9389 13.9496 21.7458 15.7312 21.0078C17.5127 20.2699 19.0355 19.0202 20.1068 17.4168C21.1782 15.8134 21.75 13.9284 21.75 12C21.7473 9.41498 20.7192 6.93661 18.8913 5.10872C17.0634 3.28084 14.585 2.25273 12 2.25ZM12 20.25C10.3683 20.25 8.77326 19.7661 7.41655 18.8596C6.05984 17.9531 5.00242 16.6646 4.378 15.1571C3.75358 13.6496 3.5902 11.9908 3.90853 10.3905C4.22685 8.79016 5.01259 7.32015 6.16637 6.16637C7.32016 5.01259 8.79017 4.22685 10.3905 3.90852C11.9909 3.59019 13.6497 3.75357 15.1571 4.37799C16.6646 5.00242 17.9531 6.05984 18.8596 7.41655C19.7661 8.77325 20.25 10.3683 20.25 12C20.2475 14.1873 19.3775 16.2843 17.8309 17.8309C16.2843 19.3775 14.1873 20.2475 12 20.25ZM13.5 16.5C13.5 16.6989 13.421 16.8897 13.2803 17.0303C13.1397 17.171 12.9489 17.25 12.75 17.25C12.3522 17.25 11.9706 17.092 11.6893 16.8107C11.408 16.5294 11.25 16.1478 11.25 15.75V12C11.0511 12 10.8603 11.921 10.7197 11.7803C10.579 11.6397 10.5 11.4489 10.5 11.25C10.5 11.0511 10.579 10.8603 10.7197 10.7197C10.8603 10.579 11.0511 10.5 11.25 10.5C11.6478 10.5 12.0294 10.658 12.3107 10.9393C12.592 11.2206 12.75 11.6022 12.75 12V15.75C12.9489 15.75 13.1397 15.829 13.2803 15.9697C13.421 16.1103 13.5 16.3011 13.5 16.5ZM10.5 7.875C10.5 7.6525 10.566 7.43499 10.6896 7.24998C10.8132 7.06498 10.9889 6.92078 11.1945 6.83564C11.4001 6.75049 11.6263 6.72821 11.8445 6.77162C12.0627 6.81502 12.2632 6.92217 12.4205 7.0795C12.5778 7.23684 12.685 7.43729 12.7284 7.65552C12.7718 7.87375 12.7495 8.09995 12.6644 8.30552C12.5792 8.51109 12.435 8.68679 12.25 8.8104C12.065 8.93402 11.8475 9 11.625 9C11.3266 9 11.0405 8.88147 10.8295 8.6705C10.6185 8.45952 10.5 8.17337 10.5 7.875Z"/></svg></button>
+                  <div id="source-recompra" role="tooltip" class="hidden border border-white/20 group-hover:block group-focus:block group-focus-within:block absolute top-[calc(100%+4px)] right-0 z-50 bg-cesa-blue-dark text-neutral-100 font-outfit font-light text-[14px] md:text-xs leading-[1.4] md:leading-[1.3] px-3 py-3 md:py-2 rounded-xs w-[280px] max-w-[calc(100vw-32px)] text-left">
+                    <p class="m-0"><span class="font-medium">Qué es:</span> de quienes compraron hace hasta 12 meses, cuántos volvieron a comprar.</p>
+                    <p class="m-0 mt-1"><span class="font-medium">Fórmula:</span> personas con segunda compra ÷ personas con primera compra en la ventana.</p>
+                    <p class="m-0 mt-1"><span class="font-medium">Fuente:</span> pagos por persona en la base de C4L.</p>
+                    <p class="m-0 mt-1"><span class="font-medium">Frecuencia:</span> semanal, acumulado 12 meses.</p>
+                    <p class="m-0 mt-1"><span class="font-medium">Modo:</span> automático.</p>
+                    <p class="m-0 mt-1"><span class="font-medium">Activo:</span> C4L.</p>
+                  </div>
+                </span>
+                </div>
+                <span class="font-outfit font-light text-[14px] md:text-[12px] leading-[1.3] text-neutral-100">Esta semana</span>
+              </div>
+              <span class="group relative inline-flex">
+                <button type="button" class="inline-flex items-center gap-1 px-2 py-1 rounded-full border text-[14px] md:text-[12px] font-outfit font-light leading-[1.3] w-fit whitespace-nowrap border-white text-white cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white hit-44-chip-down" data-maturity="medicion-activa" aria-describedby="maturity-recompra-general">
+                <span class="inline-flex items-center justify-center w-4 h-4 shrink-0"><svg viewBox="0 0 18 18" fill="currentColor" class="w-3 h-3" aria-hidden="true"><path d="M12.2105 6.91453C12.2628 6.96677 12.3043 7.02881 12.3326 7.0971C12.3609 7.16538 12.3754 7.23858 12.3754 7.3125C12.3754 7.38642 12.3609 7.45962 12.3326 7.5279C12.3043 7.59619 12.2628 7.65823 12.2105 7.71047L8.27297 11.648C8.22073 11.7003 8.15869 11.7418 8.09041 11.7701C8.02212 11.7984 7.94892 11.8129 7.875 11.8129C7.80108 11.8129 7.72789 11.7984 7.6596 11.7701C7.59131 11.7418 7.52928 11.7003 7.47703 11.648L5.78953 9.96047C5.68399 9.85492 5.62469 9.71177 5.62469 9.5625C5.62469 9.41323 5.68399 9.27008 5.78953 9.16453C5.89508 9.05898 6.03824 8.99969 6.1875 8.99969C6.33677 8.99969 6.47992 9.05898 6.58547 9.16453L7.875 10.4548L11.4145 6.91453C11.4668 6.86223 11.5288 6.82074 11.5971 6.79244C11.6654 6.76413 11.7386 6.74956 11.8125 6.74956C11.8864 6.74956 11.9596 6.76413 12.0279 6.79244C12.0962 6.82074 12.1582 6.86223 12.2105 6.91453ZM16.3125 9C16.3125 10.4463 15.8836 11.8601 15.0801 13.0626C14.2766 14.2651 13.1346 15.2024 11.7984 15.7559C10.4622 16.3093 8.99189 16.4541 7.57341 16.172C6.15492 15.8898 4.85196 15.1934 3.82928 14.1707C2.80661 13.148 2.11017 11.8451 1.82801 10.4266C1.54586 9.00811 1.69067 7.53781 2.24413 6.20163C2.7976 4.86544 3.73486 3.72339 4.9374 2.91988C6.13993 2.11637 7.55373 1.6875 9 1.6875C10.9388 1.68955 12.7975 2.46063 14.1685 3.83154C15.5394 5.20246 16.3105 7.06123 16.3125 9ZM15.1875 9C15.1875 7.77623 14.8246 6.57994 14.1447 5.56241C13.4648 4.54488 12.4985 3.75181 11.3679 3.2835C10.2372 2.81518 8.99314 2.69265 7.79288 2.93139C6.59262 3.17014 5.49012 3.75944 4.62478 4.62478C3.75944 5.49011 3.17014 6.59262 2.93139 7.79288C2.69265 8.99314 2.81518 10.2372 3.2835 11.3679C3.75182 12.4985 4.54488 13.4648 5.56241 14.1447C6.57994 14.8246 7.77623 15.1875 9 15.1875C10.6405 15.1856 12.2132 14.5331 13.3732 13.3732C14.5331 12.2132 15.1856 10.6405 15.1875 9Z"/></svg></span>
+                Medición activa
+                </button>
+                <div id="maturity-recompra-general" role="tooltip" class="hidden border border-white/20 group-hover:block group-focus:block group-focus-within:block absolute top-[calc(100%+4px)] right-0 z-50 bg-cesa-blue-dark text-neutral-100 font-outfit font-light text-[14px] md:text-xs leading-[1.4] md:leading-[1.3] px-3 py-3 md:py-2 rounded-xs w-[280px] max-w-[calc(100vw-32px)] text-left">
+                  <p class="m-0"><span class="font-medium">Qué es:</span> la métrica se mide cada semana con fuente y fórmula definidas y ya tiene línea base. La comparación contra la semana anterior es válida.</p>
+                </div>
+              </span>
+            </div>
+            <div data-state="default">
+              <div class="flex flex-wrap items-end gap-2">
+                <p class="font-outfit font-bold text-4xl leading-none tracking-[-1px] tabular-nums text-white m-0">18 %</p>
+                <span class="inline-flex items-center gap-1 rounded-[4px] px-1.5 py-0.5 text-[14px] md:text-[12px] font-medium leading-none bg-success-50 text-success-contrast" data-delta="favorable"><span aria-hidden="true">▲</span><span class="sr-only">Sube</span> +2 pp</span>
+              </div>
+              <p class="font-outfit font-light text-[14px] md:text-[12px] leading-[1.3] text-neutral-100 m-0 mt-1">Comparado con 16 % la semana anterior</p>
+            </div>
+            <div data-state="empty-week">
+              <p class="font-outfit font-bold text-4xl leading-none tracking-[-1px] tabular-nums text-white m-0"><span aria-hidden="true">—</span><span class="sr-only">Sin valor</span></p>
+              <p class="font-outfit font-light text-[14px] md:text-[12px] leading-[1.3] text-neutral-100 m-0 mt-1">Sin datos en esta semana · comparado con 16 % la semana anterior</p>
+            </div>
+            <div data-state="source-error">
+              <div class="flex flex-col items-center text-center gap-3 py-6 px-4 rounded-[4px] border border-neutral-200 bg-neutral-0" role="alert">
+                <p class="font-outfit font-light text-base leading-[1.3] text-neutral-600 max-w-md m-0">No pudimos leer la fuente de métricas. Intenta de nuevo.</p>
+                <button type="button" data-retry data-track="reintentar"
+                        class="max-w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 min-h-[44px] rounded-[2px] font-outfit font-light text-[16px] leading-[16px] cursor-pointer transition-colors border border-cesa-blue bg-transparent text-cesa-blue hover:bg-neutral-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cesa-blue">
+                  <span class="min-w-0 truncate whitespace-nowrap py-[3px]">Reintentar</span>
+                </button>
+              </div>
+            </div>
+            <div data-state="loading">
+              <div class="flex flex-col gap-2" aria-hidden="true">
+                <div class="rounded-[4px] w-1/2 h-8 bg-neutral-200 motion-safe:animate-skeleton-pulse"></div>
+                <div class="rounded-[4px] w-2/3 h-4 bg-neutral-200 motion-safe:animate-skeleton-pulse"></div>
+              </div>
+              <p class="sr-only" role="status">Cargando Recompra…</p>
+            </div>
+          </article>
+        </div>
+
+        <!-- Nota de madurez -->
+        <!-- Atoms/Alert Message (Figma «Section message» Information · Medium, nodo 449:12227) con Icon / Info a 16px en caja de 20px (regla de íconos DEC-REP-43-049); variante local sin botón de cerrar -->
+        <div role="note" class="flex items-center gap-2 p-2 w-full rounded-[4px] border border-information-200 bg-chip-topic-bg" data-block="madurez">
+          <span class="inline-flex items-center justify-center w-5 h-5 shrink-0 text-information-200"><svg viewBox="0 0 24 24" fill="currentColor" class="w-4 h-4" aria-hidden="true"><path d="M12 2.25C10.0716 2.25 8.18657 2.82183 6.58319 3.89317C4.97982 4.96451 3.73013 6.48726 2.99218 8.26884C2.25422 10.0504 2.06114 12.0108 2.43735 13.9021C2.81355 15.7934 3.74215 17.5307 5.10571 18.8943C6.46928 20.2579 8.20656 21.1865 10.0979 21.5627C11.9892 21.9389 13.9496 21.7458 15.7312 21.0078C17.5127 20.2699 19.0355 19.0202 20.1068 17.4168C21.1782 15.8134 21.75 13.9284 21.75 12C21.7473 9.41498 20.7192 6.93661 18.8913 5.10872C17.0634 3.28084 14.585 2.25273 12 2.25ZM12 20.25C10.3683 20.25 8.77326 19.7661 7.41655 18.8596C6.05984 17.9531 5.00242 16.6646 4.378 15.1571C3.75358 13.6496 3.5902 11.9908 3.90853 10.3905C4.22685 8.79016 5.01259 7.32015 6.16637 6.16637C7.32016 5.01259 8.79017 4.22685 10.3905 3.90852C11.9909 3.59019 13.6497 3.75357 15.1571 4.37799C16.6646 5.00242 17.9531 6.05984 18.8596 7.41655C19.7661 8.77325 20.25 10.3683 20.25 12C20.2475 14.1873 19.3775 16.2843 17.8309 17.8309C16.2843 19.3775 14.1873 20.2475 12 20.25ZM13.5 16.5C13.5 16.6989 13.421 16.8897 13.2803 17.0303C13.1397 17.171 12.9489 17.25 12.75 17.25C12.3522 17.25 11.9706 17.092 11.6893 16.8107C11.408 16.5294 11.25 16.1478 11.25 15.75V12C11.0511 12 10.8603 11.921 10.7197 11.7803C10.579 11.6397 10.5 11.4489 10.5 11.25C10.5 11.0511 10.579 10.8603 10.7197 10.7197C10.8603 10.579 11.0511 10.5 11.25 10.5C11.6478 10.5 12.0294 10.658 12.3107 10.9393C12.592 11.2206 12.75 11.6022 12.75 12V15.75C12.9489 15.75 13.1397 15.829 13.2803 15.9697C13.421 16.1103 13.5 16.3011 13.5 16.5ZM10.5 7.875C10.5 7.6525 10.566 7.43499 10.6896 7.24998C10.8132 7.06498 10.9889 6.92078 11.1945 6.83564C11.4001 6.75049 11.6263 6.72821 11.8445 6.77162C12.0627 6.81502 12.2632 6.92217 12.4205 7.0795C12.5778 7.23684 12.685 7.43729 12.7284 7.65552C12.7718 7.87375 12.7495 8.09995 12.6644 8.30552C12.5792 8.51109 12.435 8.68679 12.25 8.8104C12.065 8.93402 11.8475 9 11.625 9C11.3266 9 11.0405 8.88147 10.8295 8.6705C10.6185 8.45952 10.5 8.17337 10.5 7.875Z"/></svg></span>
+          <div class="flex flex-col gap-1 min-w-0">
+            <p class="font-outfit font-light text-[14px] md:text-[12px] leading-[1.3] text-information-200 m-0">Estamos en fase de medición y construcción de líneas base, no de optimización final.</p>
+          </div>
+        </div>
+
+        <!-- Lectura ejecutiva, compacta al pie (DEC-REP-43-048) -->
+        <article class="bg-white rounded-[4px] shadow-sm hover:shadow-md transition-shadow p-4 flex flex-col gap-1" data-block="lectura-ejecutiva" aria-labelledby="general-reading-title">
+          <h3 id="general-reading-title" class="font-outfit font-semibold text-[14px] leading-[1.3] text-cesa-blue-dark m-0">Lectura ejecutiva</h3>
+          <div data-state="default">
+            <p class="font-outfit font-light text-[14px] leading-[1.4] text-cesa-blue-dark m-0">
+              Resultados positivos en <strong class="font-semibold text-cesa-blue">adquisición</strong> y <strong class="font-semibold text-cesa-blue">retención</strong>, reflejados en <strong class="font-semibold text-cesa-blue">CAC</strong> y <strong class="font-semibold text-cesa-blue">Recompra</strong>; <strong class="font-semibold text-cesa-blue">Conversión</strong> sigue consolidando su línea base.
+              Las oportunidades de la célula se concentran en la <strong class="font-semibold text-cesa-blue">captación eficiente</strong>, la <strong class="font-semibold text-cesa-blue">reactivación de usuarios</strong> y la <strong class="font-semibold text-cesa-blue">generación de valor sostenible</strong>.
+            </p>
+          </div>
+          <div data-state="empty-week">
+            <p class="font-outfit font-light text-[14px] leading-[1.4] text-neutral-600 m-0">Sin lectura para esta semana</p>
+          </div>
+          <div data-state="source-error">
+            <div class="flex flex-col items-center text-center gap-3 py-6 px-4 rounded-[4px] border border-neutral-200 bg-neutral-0" role="alert">
+                <p class="font-outfit font-light text-base leading-[1.3] text-neutral-600 max-w-md m-0">No pudimos leer la fuente de métricas. Intenta de nuevo.</p>
+                <button type="button" data-retry data-track="reintentar"
+                        class="max-w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 min-h-[44px] rounded-[2px] font-outfit font-light text-[16px] leading-[16px] cursor-pointer transition-colors border border-cesa-blue bg-transparent text-cesa-blue hover:bg-neutral-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cesa-blue">
+                  <span class="min-w-0 truncate whitespace-nowrap py-[3px]">Reintentar</span>
+                </button>
+              </div>
+          </div>
+          <div data-state="loading">
+            <div class="flex flex-col gap-2" aria-hidden="true">
+              <div class="rounded-[4px] w-full h-4 bg-neutral-200 motion-safe:animate-skeleton-pulse"></div>
+              <div class="rounded-[4px] w-2/3 h-4 bg-neutral-200 motion-safe:animate-skeleton-pulse"></div>
+            </div>
+            <p class="sr-only" role="status">Cargando lectura ejecutiva…</p>
+          </div>
+        </article>
+        </div>
+      </section>
+
+      <!-- ================================================================
+           PESTAÑA PALANCAS — ¿Cómo decide la célula qué trabajar?
+           ================================================================ -->
+      <section id="panel-levers" role="tabpanel" aria-labelledby="tab-levers" tabindex="0" data-tab-panel="levers"
+               class="hidden focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cesa-blue">
+        <h2 class="sr-only">Palancas</h2>
+        <div class="flex flex-col gap-4">
+          <div class="flex items-stretch gap-3 min-w-0">
+            <div class="shrink-0 self-stretch w-1.5 bg-cesa-blue rounded-[2px]" aria-hidden="true"></div>
+            <h2 class="font-outfit font-semibold text-[24px] leading-none text-cesa-blue-dark m-0">¿Cómo decide la célula qué trabajar?</h2>
+          </div>
+
+          <!-- Criterio de priorización -->
+          <!-- Atoms/Alert Message (Figma «Section message» Information · Medium, nodo 449:12227) con Icon / Info a 16px en caja de 20px (regla de íconos DEC-REP-43-049); variante local sin botón de cerrar -->
+          <div role="note" class="flex items-center gap-2 p-2 w-full rounded-[4px] border border-information-200 bg-chip-topic-bg" data-block="priorizacion">
+            <span class="inline-flex items-center justify-center w-5 h-5 shrink-0 text-information-200"><svg viewBox="0 0 24 24" fill="currentColor" class="w-4 h-4" aria-hidden="true"><path d="M12 2.25C10.0716 2.25 8.18657 2.82183 6.58319 3.89317C4.97982 4.96451 3.73013 6.48726 2.99218 8.26884C2.25422 10.0504 2.06114 12.0108 2.43735 13.9021C2.81355 15.7934 3.74215 17.5307 5.10571 18.8943C6.46928 20.2579 8.20656 21.1865 10.0979 21.5627C11.9892 21.9389 13.9496 21.7458 15.7312 21.0078C17.5127 20.2699 19.0355 19.0202 20.1068 17.4168C21.1782 15.8134 21.75 13.9284 21.75 12C21.7473 9.41498 20.7192 6.93661 18.8913 5.10872C17.0634 3.28084 14.585 2.25273 12 2.25ZM12 20.25C10.3683 20.25 8.77326 19.7661 7.41655 18.8596C6.05984 17.9531 5.00242 16.6646 4.378 15.1571C3.75358 13.6496 3.5902 11.9908 3.90853 10.3905C4.22685 8.79016 5.01259 7.32015 6.16637 6.16637C7.32016 5.01259 8.79017 4.22685 10.3905 3.90852C11.9909 3.59019 13.6497 3.75357 15.1571 4.37799C16.6646 5.00242 17.9531 6.05984 18.8596 7.41655C19.7661 8.77325 20.25 10.3683 20.25 12C20.2475 14.1873 19.3775 16.2843 17.8309 17.8309C16.2843 19.3775 14.1873 20.2475 12 20.25ZM13.5 16.5C13.5 16.6989 13.421 16.8897 13.2803 17.0303C13.1397 17.171 12.9489 17.25 12.75 17.25C12.3522 17.25 11.9706 17.092 11.6893 16.8107C11.408 16.5294 11.25 16.1478 11.25 15.75V12C11.0511 12 10.8603 11.921 10.7197 11.7803C10.579 11.6397 10.5 11.4489 10.5 11.25C10.5 11.0511 10.579 10.8603 10.7197 10.7197C10.8603 10.579 11.0511 10.5 11.25 10.5C11.6478 10.5 12.0294 10.658 12.3107 10.9393C12.592 11.2206 12.75 11.6022 12.75 12V15.75C12.9489 15.75 13.1397 15.829 13.2803 15.9697C13.421 16.1103 13.5 16.3011 13.5 16.5ZM10.5 7.875C10.5 7.6525 10.566 7.43499 10.6896 7.24998C10.8132 7.06498 10.9889 6.92078 11.1945 6.83564C11.4001 6.75049 11.6263 6.72821 11.8445 6.77162C12.0627 6.81502 12.2632 6.92217 12.4205 7.0795C12.5778 7.23684 12.685 7.43729 12.7284 7.65552C12.7718 7.87375 12.7495 8.09995 12.6644 8.30552C12.5792 8.51109 12.435 8.68679 12.25 8.8104C12.065 8.93402 11.8475 9 11.625 9C11.3266 9 11.0405 8.88147 10.8295 8.6705C10.6185 8.45952 10.5 8.17337 10.5 7.875Z"/></svg></span>
+            <div class="flex flex-col gap-1 min-w-0">
+              <p class="font-outfit font-light text-[14px] md:text-[12px] leading-[1.3] text-information-200 m-0">Las bets se priorizan por su capacidad de mover una o más palancas estratégicas. La priorización no se realiza por orden de llegada de solicitudes, sino por impacto esperado sobre métricas de negocio.</p>
+              <p class="font-outfit font-light text-[14px] md:text-[12px] leading-[1.3] text-information-200 m-0">Método de priorización: ShapeLane.</p>
+            </div>
+          </div>
+
+          <!-- Sin grid-cols-5 compilado: grid de 3 en tablet, flex de 5 iguales (xl:flex-1) en escritorio -->
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-4 xl:flex xl:flex-nowrap">
+
+            <!-- Palanca: Ticket promedio — tile sólido T1 (DEC-REP-43-050). Ticket promedio y Frecuencia: datos existentes en pagos de Ecollect; valores de la maqueta hasta conectar la consulta -->
+            <article class="bg-cesa-blue rounded-[4px] p-5 flex flex-col gap-2 xl:flex-1 min-w-0 text-white" data-lever="ticket-promedio" data-tile="T1">
+              
+              
+              <div class="flex flex-col gap-1">
+                <div class="flex items-center gap-1">
+                <h3 class="font-outfit font-semibold text-[16px] leading-[1.3] text-white m-0">Ticket promedio</h3>
+                <span class="group relative inline-flex">
+                  <button type="button" class="inline-flex items-center justify-center w-5 h-5 rounded-full text-white hover:opacity-80 cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white hit-44" aria-label="¿De dónde sale Ticket promedio?" aria-describedby="source-ticket-promedio" data-track="de-donde-sale"><svg viewBox="0 0 24 24" fill="currentColor" class="w-4 h-4" aria-hidden="true"><path d="M12 2.25C10.0716 2.25 8.18657 2.82183 6.58319 3.89317C4.97982 4.96451 3.73013 6.48726 2.99218 8.26884C2.25422 10.0504 2.06114 12.0108 2.43735 13.9021C2.81355 15.7934 3.74215 17.5307 5.10571 18.8943C6.46928 20.2579 8.20656 21.1865 10.0979 21.5627C11.9892 21.9389 13.9496 21.7458 15.7312 21.0078C17.5127 20.2699 19.0355 19.0202 20.1068 17.4168C21.1782 15.8134 21.75 13.9284 21.75 12C21.7473 9.41498 20.7192 6.93661 18.8913 5.10872C17.0634 3.28084 14.585 2.25273 12 2.25ZM12 20.25C10.3683 20.25 8.77326 19.7661 7.41655 18.8596C6.05984 17.9531 5.00242 16.6646 4.378 15.1571C3.75358 13.6496 3.5902 11.9908 3.90853 10.3905C4.22685 8.79016 5.01259 7.32015 6.16637 6.16637C7.32016 5.01259 8.79017 4.22685 10.3905 3.90852C11.9909 3.59019 13.6497 3.75357 15.1571 4.37799C16.6646 5.00242 17.9531 6.05984 18.8596 7.41655C19.7661 8.77325 20.25 10.3683 20.25 12C20.2475 14.1873 19.3775 16.2843 17.8309 17.8309C16.2843 19.3775 14.1873 20.2475 12 20.25ZM13.5 16.5C13.5 16.6989 13.421 16.8897 13.2803 17.0303C13.1397 17.171 12.9489 17.25 12.75 17.25C12.3522 17.25 11.9706 17.092 11.6893 16.8107C11.408 16.5294 11.25 16.1478 11.25 15.75V12C11.0511 12 10.8603 11.921 10.7197 11.7803C10.579 11.6397 10.5 11.4489 10.5 11.25C10.5 11.0511 10.579 10.8603 10.7197 10.7197C10.8603 10.579 11.0511 10.5 11.25 10.5C11.6478 10.5 12.0294 10.658 12.3107 10.9393C12.592 11.2206 12.75 11.6022 12.75 12V15.75C12.9489 15.75 13.1397 15.829 13.2803 15.9697C13.421 16.1103 13.5 16.3011 13.5 16.5ZM10.5 7.875C10.5 7.6525 10.566 7.43499 10.6896 7.24998C10.8132 7.06498 10.9889 6.92078 11.1945 6.83564C11.4001 6.75049 11.6263 6.72821 11.8445 6.77162C12.0627 6.81502 12.2632 6.92217 12.4205 7.0795C12.5778 7.23684 12.685 7.43729 12.7284 7.65552C12.7718 7.87375 12.7495 8.09995 12.6644 8.30552C12.5792 8.51109 12.435 8.68679 12.25 8.8104C12.065 8.93402 11.8475 9 11.625 9C11.3266 9 11.0405 8.88147 10.8295 8.6705C10.6185 8.45952 10.5 8.17337 10.5 7.875Z"/></svg></button>
+                  <div id="source-ticket-promedio" role="tooltip" class="hidden border border-white/20 group-hover:block group-focus:block group-focus-within:block absolute top-[calc(100%+4px)] left-0 z-50 bg-cesa-blue-dark text-neutral-100 font-outfit font-light text-[14px] md:text-xs leading-[1.4] md:leading-[1.3] px-3 py-3 md:py-2 rounded-xs w-[280px] max-w-[calc(100vw-32px)] text-left">
+                    <p class="m-0"><span class="font-medium">Qué es:</span> cuánto paga en promedio un cliente por cada compra (COP por compra).</p>
+                    <p class="m-0 mt-1"><span class="font-medium">Fórmula:</span> ingresos de pagos aprobados de la semana ÷ número de pagos aprobados (bruto, sin reembolsos).</p>
+                    <p class="m-0 mt-1"><span class="font-medium">Fuente:</span> pagos de C4L (Ecollect).</p>
+                    <p class="m-0 mt-1"><span class="font-medium">Frecuencia:</span> semanal.</p>
+                    <p class="m-0 mt-1"><span class="font-medium">Modo:</span> automático.</p>
+                    <p class="m-0 mt-1"><span class="font-medium">Activo:</span> C4L.</p>
+                    <p class="m-0 mt-1"><span class="font-medium">Guardrail:</span> la palanca que no debe empeorar al mover esta.</p>
+                  </div>
+                </span>
+              </div>
+                <p class="font-outfit font-light text-[14px] leading-[1.3] text-neutral-100 m-0">¿Por qué pagaría más?</p>
+              </div>
+              <span class="group relative inline-flex">
+                <button type="button" class="inline-flex items-center gap-1 px-2 py-1 rounded-full border text-[14px] md:text-[12px] font-outfit font-light leading-[1.3] w-fit whitespace-nowrap border-white text-white cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white hit-44-chip" data-maturity="medicion-activa" aria-describedby="maturity-ticket-promedio-levers">
+                <span class="inline-flex items-center justify-center w-4 h-4 shrink-0"><svg viewBox="0 0 18 18" fill="currentColor" class="w-3 h-3" aria-hidden="true"><path d="M12.2105 6.91453C12.2628 6.96677 12.3043 7.02881 12.3326 7.0971C12.3609 7.16538 12.3754 7.23858 12.3754 7.3125C12.3754 7.38642 12.3609 7.45962 12.3326 7.5279C12.3043 7.59619 12.2628 7.65823 12.2105 7.71047L8.27297 11.648C8.22073 11.7003 8.15869 11.7418 8.09041 11.7701C8.02212 11.7984 7.94892 11.8129 7.875 11.8129C7.80108 11.8129 7.72789 11.7984 7.6596 11.7701C7.59131 11.7418 7.52928 11.7003 7.47703 11.648L5.78953 9.96047C5.68399 9.85492 5.62469 9.71177 5.62469 9.5625C5.62469 9.41323 5.68399 9.27008 5.78953 9.16453C5.89508 9.05898 6.03824 8.99969 6.1875 8.99969C6.33677 8.99969 6.47992 9.05898 6.58547 9.16453L7.875 10.4548L11.4145 6.91453C11.4668 6.86223 11.5288 6.82074 11.5971 6.79244C11.6654 6.76413 11.7386 6.74956 11.8125 6.74956C11.8864 6.74956 11.9596 6.76413 12.0279 6.79244C12.0962 6.82074 12.1582 6.86223 12.2105 6.91453ZM16.3125 9C16.3125 10.4463 15.8836 11.8601 15.0801 13.0626C14.2766 14.2651 13.1346 15.2024 11.7984 15.7559C10.4622 16.3093 8.99189 16.4541 7.57341 16.172C6.15492 15.8898 4.85196 15.1934 3.82928 14.1707C2.80661 13.148 2.11017 11.8451 1.82801 10.4266C1.54586 9.00811 1.69067 7.53781 2.24413 6.20163C2.7976 4.86544 3.73486 3.72339 4.9374 2.91988C6.13993 2.11637 7.55373 1.6875 9 1.6875C10.9388 1.68955 12.7975 2.46063 14.1685 3.83154C15.5394 5.20246 16.3105 7.06123 16.3125 9ZM15.1875 9C15.1875 7.77623 14.8246 6.57994 14.1447 5.56241C13.4648 4.54488 12.4985 3.75181 11.3679 3.2835C10.2372 2.81518 8.99314 2.69265 7.79288 2.93139C6.59262 3.17014 5.49012 3.75944 4.62478 4.62478C3.75944 5.49011 3.17014 6.59262 2.93139 7.79288C2.69265 8.99314 2.81518 10.2372 3.2835 11.3679C3.75182 12.4985 4.54488 13.4648 5.56241 14.1447C6.57994 14.8246 7.77623 15.1875 9 15.1875C10.6405 15.1856 12.2132 14.5331 13.3732 13.3732C14.5331 12.2132 15.1856 10.6405 15.1875 9Z"/></svg></span>
+                Medición activa
+                </button>
+                <div id="maturity-ticket-promedio-levers" role="tooltip" class="hidden border border-white/20 group-hover:block group-focus:block group-focus-within:block absolute top-[calc(100%+4px)] right-0 z-50 bg-cesa-blue-dark text-neutral-100 font-outfit font-light text-[14px] md:text-xs leading-[1.4] md:leading-[1.3] px-3 py-3 md:py-2 rounded-xs w-[280px] max-w-[calc(100vw-32px)] text-left">
+                  <p class="m-0"><span class="font-medium">Qué es:</span> la métrica se mide cada semana con fuente y fórmula definidas y ya tiene línea base. La comparación contra la semana anterior es válida.</p>
+                </div>
+              </span>
+              <!-- Panel interno blanco (DEC-REP-43-053): solo «Dato de hoy»; se ajusta a su contenido, sin alto fijo -->
+              <div data-state="default empty-week source-error">
+                <div class="bg-white rounded-[4px] p-3 flex flex-col gap-1 min-w-0" data-lever-panel data-baseline-block="ticket-promedio">
+                  <p class="flex flex-wrap items-center gap-2 font-outfit font-light text-[14px] md:text-[12px] leading-[1.3] text-neutral-600 m-0">Dato de hoy</p>
+                  <p class="font-outfit font-bold text-[28px] leading-none tracking-[-1px] tabular-nums text-cesa-blue-dark m-0"><span class="text-[14px] font-light text-neutral-600">COP $</span> 2.410.000</p>
+                </div>
+              </div>
+              <div data-state="loading">
+                <div class="rounded-[4px] w-full h-16 bg-neutral-200 motion-safe:animate-skeleton-pulse" aria-hidden="true"></div>
+              </div>
+              <div class="flex flex-col gap-2 mt-auto" data-lever-foot>
+                <div class="flex flex-col gap-1 min-w-0">
+                  <p class="font-outfit font-light text-[14px] md:text-[12px] leading-[1.3] text-neutral-100 m-0">Línea base</p>
+                  <p class="font-outfit font-bold text-[16px] leading-none tracking-[-1px] tabular-nums text-white m-0"><span class="text-[14px] md:text-[12px] font-light text-neutral-100">COP $</span> 2.350.000</p>
+                </div>
+                <p class="font-outfit text-[14px] md:text-[12px] leading-[1.3] m-0"><span class="font-light text-neutral-100">Guardrail:</span> <span class="font-medium text-white">Recompra a 12 meses</span></p>
+                <div class="flex flex-col gap-1">
+                  <p class="font-outfit font-light text-[14px] md:text-[12px] leading-[1.3] text-neutral-100 m-0">Bets priorizadas:</p>
+                  <ul class="flex flex-wrap gap-1 list-none m-0 p-0">
+                  <li class="inline-flex items-center px-2 py-1 rounded-full border text-[14px] md:text-[12px] font-outfit font-light leading-[1.3] w-fit select-none border-white/40 bg-transparent text-white">Bundle diplomado + mentoría</li>
+                </ul>
+                </div>
+              </div>
+            </article>
+
+            <!-- Palanca: Frecuencia — tile sólido T2 (DEC-REP-43-050) -->
+            <article class="bg-primary-azul-002 rounded-[4px] p-5 flex flex-col gap-2 xl:flex-1 min-w-0 text-white" data-lever="frecuencia" data-tile="T2">
+              
+              
+              <div class="flex flex-col gap-1">
+                <div class="flex items-center gap-1">
+                <h3 class="font-outfit font-semibold text-[16px] leading-[1.3] text-white m-0">Frecuencia</h3>
+                <span class="group relative inline-flex">
+                  <button type="button" class="inline-flex items-center justify-center w-5 h-5 rounded-full text-white hover:opacity-80 cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white hit-44" aria-label="¿De dónde sale Frecuencia?" aria-describedby="source-frecuencia" data-track="de-donde-sale"><svg viewBox="0 0 24 24" fill="currentColor" class="w-4 h-4" aria-hidden="true"><path d="M12 2.25C10.0716 2.25 8.18657 2.82183 6.58319 3.89317C4.97982 4.96451 3.73013 6.48726 2.99218 8.26884C2.25422 10.0504 2.06114 12.0108 2.43735 13.9021C2.81355 15.7934 3.74215 17.5307 5.10571 18.8943C6.46928 20.2579 8.20656 21.1865 10.0979 21.5627C11.9892 21.9389 13.9496 21.7458 15.7312 21.0078C17.5127 20.2699 19.0355 19.0202 20.1068 17.4168C21.1782 15.8134 21.75 13.9284 21.75 12C21.7473 9.41498 20.7192 6.93661 18.8913 5.10872C17.0634 3.28084 14.585 2.25273 12 2.25ZM12 20.25C10.3683 20.25 8.77326 19.7661 7.41655 18.8596C6.05984 17.9531 5.00242 16.6646 4.378 15.1571C3.75358 13.6496 3.5902 11.9908 3.90853 10.3905C4.22685 8.79016 5.01259 7.32015 6.16637 6.16637C7.32016 5.01259 8.79017 4.22685 10.3905 3.90852C11.9909 3.59019 13.6497 3.75357 15.1571 4.37799C16.6646 5.00242 17.9531 6.05984 18.8596 7.41655C19.7661 8.77325 20.25 10.3683 20.25 12C20.2475 14.1873 19.3775 16.2843 17.8309 17.8309C16.2843 19.3775 14.1873 20.2475 12 20.25ZM13.5 16.5C13.5 16.6989 13.421 16.8897 13.2803 17.0303C13.1397 17.171 12.9489 17.25 12.75 17.25C12.3522 17.25 11.9706 17.092 11.6893 16.8107C11.408 16.5294 11.25 16.1478 11.25 15.75V12C11.0511 12 10.8603 11.921 10.7197 11.7803C10.579 11.6397 10.5 11.4489 10.5 11.25C10.5 11.0511 10.579 10.8603 10.7197 10.7197C10.8603 10.579 11.0511 10.5 11.25 10.5C11.6478 10.5 12.0294 10.658 12.3107 10.9393C12.592 11.2206 12.75 11.6022 12.75 12V15.75C12.9489 15.75 13.1397 15.829 13.2803 15.9697C13.421 16.1103 13.5 16.3011 13.5 16.5ZM10.5 7.875C10.5 7.6525 10.566 7.43499 10.6896 7.24998C10.8132 7.06498 10.9889 6.92078 11.1945 6.83564C11.4001 6.75049 11.6263 6.72821 11.8445 6.77162C12.0627 6.81502 12.2632 6.92217 12.4205 7.0795C12.5778 7.23684 12.685 7.43729 12.7284 7.65552C12.7718 7.87375 12.7495 8.09995 12.6644 8.30552C12.5792 8.51109 12.435 8.68679 12.25 8.8104C12.065 8.93402 11.8475 9 11.625 9C11.3266 9 11.0405 8.88147 10.8295 8.6705C10.6185 8.45952 10.5 8.17337 10.5 7.875Z"/></svg></button>
+                  <div id="source-frecuencia" role="tooltip" class="hidden border border-white/20 group-hover:block group-focus:block group-focus-within:block absolute top-[calc(100%+4px)] left-0 z-50 bg-cesa-blue-dark text-neutral-100 font-outfit font-light text-[14px] md:text-xs leading-[1.4] md:leading-[1.3] px-3 py-3 md:py-2 rounded-xs w-[280px] max-w-[calc(100vw-32px)] text-left">
+                    <p class="m-0"><span class="font-medium">Qué es:</span> cuántas compras hace un cliente al año.</p>
+                    <p class="m-0 mt-1"><span class="font-medium">Fórmula:</span> pagos aprobados de los últimos 12 meses ÷ compradores únicos de esos 12 meses.</p>
+                    <p class="m-0 mt-1"><span class="font-medium">Fuente:</span> pagos de C4L (Ecollect); operativamente es la recompra.</p>
+                    <p class="m-0 mt-1"><span class="font-medium">Frecuencia:</span> semanal, acumulado 12 meses.</p>
+                    <p class="m-0 mt-1"><span class="font-medium">Modo:</span> automático.</p>
+                    <p class="m-0 mt-1"><span class="font-medium">Activo:</span> C4L.</p>
+                    <p class="m-0 mt-1"><span class="font-medium">Guardrail:</span> la palanca que no debe empeorar al mover esta.</p>
+                  </div>
+                </span>
+              </div>
+                <p class="font-outfit font-light text-[14px] leading-[1.3] text-neutral-100 m-0">¿Qué lo hace volver antes?</p>
+              </div>
+              <span class="group relative inline-flex">
+                <button type="button" class="inline-flex items-center gap-1 px-2 py-1 rounded-full border text-[14px] md:text-[12px] font-outfit font-light leading-[1.3] w-fit whitespace-nowrap border-white text-white cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white hit-44-chip" data-maturity="medicion-activa" aria-describedby="maturity-frecuencia-levers">
+                <span class="inline-flex items-center justify-center w-4 h-4 shrink-0"><svg viewBox="0 0 18 18" fill="currentColor" class="w-3 h-3" aria-hidden="true"><path d="M12.2105 6.91453C12.2628 6.96677 12.3043 7.02881 12.3326 7.0971C12.3609 7.16538 12.3754 7.23858 12.3754 7.3125C12.3754 7.38642 12.3609 7.45962 12.3326 7.5279C12.3043 7.59619 12.2628 7.65823 12.2105 7.71047L8.27297 11.648C8.22073 11.7003 8.15869 11.7418 8.09041 11.7701C8.02212 11.7984 7.94892 11.8129 7.875 11.8129C7.80108 11.8129 7.72789 11.7984 7.6596 11.7701C7.59131 11.7418 7.52928 11.7003 7.47703 11.648L5.78953 9.96047C5.68399 9.85492 5.62469 9.71177 5.62469 9.5625C5.62469 9.41323 5.68399 9.27008 5.78953 9.16453C5.89508 9.05898 6.03824 8.99969 6.1875 8.99969C6.33677 8.99969 6.47992 9.05898 6.58547 9.16453L7.875 10.4548L11.4145 6.91453C11.4668 6.86223 11.5288 6.82074 11.5971 6.79244C11.6654 6.76413 11.7386 6.74956 11.8125 6.74956C11.8864 6.74956 11.9596 6.76413 12.0279 6.79244C12.0962 6.82074 12.1582 6.86223 12.2105 6.91453ZM16.3125 9C16.3125 10.4463 15.8836 11.8601 15.0801 13.0626C14.2766 14.2651 13.1346 15.2024 11.7984 15.7559C10.4622 16.3093 8.99189 16.4541 7.57341 16.172C6.15492 15.8898 4.85196 15.1934 3.82928 14.1707C2.80661 13.148 2.11017 11.8451 1.82801 10.4266C1.54586 9.00811 1.69067 7.53781 2.24413 6.20163C2.7976 4.86544 3.73486 3.72339 4.9374 2.91988C6.13993 2.11637 7.55373 1.6875 9 1.6875C10.9388 1.68955 12.7975 2.46063 14.1685 3.83154C15.5394 5.20246 16.3105 7.06123 16.3125 9ZM15.1875 9C15.1875 7.77623 14.8246 6.57994 14.1447 5.56241C13.4648 4.54488 12.4985 3.75181 11.3679 3.2835C10.2372 2.81518 8.99314 2.69265 7.79288 2.93139C6.59262 3.17014 5.49012 3.75944 4.62478 4.62478C3.75944 5.49011 3.17014 6.59262 2.93139 7.79288C2.69265 8.99314 2.81518 10.2372 3.2835 11.3679C3.75182 12.4985 4.54488 13.4648 5.56241 14.1447C6.57994 14.8246 7.77623 15.1875 9 15.1875C10.6405 15.1856 12.2132 14.5331 13.3732 13.3732C14.5331 12.2132 15.1856 10.6405 15.1875 9Z"/></svg></span>
+                Medición activa
+                </button>
+                <div id="maturity-frecuencia-levers" role="tooltip" class="hidden border border-white/20 group-hover:block group-focus:block group-focus-within:block absolute top-[calc(100%+4px)] right-0 z-50 bg-cesa-blue-dark text-neutral-100 font-outfit font-light text-[14px] md:text-xs leading-[1.4] md:leading-[1.3] px-3 py-3 md:py-2 rounded-xs w-[280px] max-w-[calc(100vw-32px)] text-left">
+                  <p class="m-0"><span class="font-medium">Qué es:</span> la métrica se mide cada semana con fuente y fórmula definidas y ya tiene línea base. La comparación contra la semana anterior es válida.</p>
+                </div>
+              </span>
+              <!-- Panel interno blanco (DEC-REP-43-053): solo «Dato de hoy»; se ajusta a su contenido, sin alto fijo -->
+              <div data-state="default empty-week source-error">
+                <div class="bg-white rounded-[4px] p-3 flex flex-col gap-1 min-w-0" data-lever-panel data-baseline-block="frecuencia">
+                  <p class="flex flex-wrap items-center gap-2 font-outfit font-light text-[14px] md:text-[12px] leading-[1.3] text-neutral-600 m-0">Dato de hoy</p>
+                  <p class="font-outfit font-bold text-[28px] leading-none tracking-[-1px] tabular-nums text-cesa-blue-dark m-0">1,5 <span class="text-[14px] font-light text-neutral-600">compras/año</span></p>
+                </div>
+              </div>
+              <div data-state="loading">
+                <div class="rounded-[4px] w-full h-16 bg-neutral-200 motion-safe:animate-skeleton-pulse" aria-hidden="true"></div>
+              </div>
+              <div class="flex flex-col gap-2 mt-auto" data-lever-foot>
+                <div class="flex flex-col gap-1 min-w-0">
+                  <p class="font-outfit font-light text-[14px] md:text-[12px] leading-[1.3] text-neutral-100 m-0">Línea base</p>
+                  <p class="font-outfit font-bold text-[16px] leading-none tracking-[-1px] tabular-nums text-white m-0">1,3 <span class="text-[14px] md:text-[12px] font-light text-neutral-100">compras/año</span></p>
+                </div>
+                <p class="font-outfit text-[14px] md:text-[12px] leading-[1.3] m-0"><span class="font-light text-neutral-100">Guardrail:</span> <span class="font-medium text-white">Ticket promedio</span></p>
+                <div class="flex flex-col gap-1">
+                  <p class="font-outfit font-light text-[14px] md:text-[12px] leading-[1.3] text-neutral-100 m-0">Bets priorizadas:</p>
+                  <ul class="flex flex-wrap gap-1 list-none m-0 p-0">
+                  <li class="inline-flex items-center px-2 py-1 rounded-full border text-[14px] md:text-[12px] font-outfit font-light leading-[1.3] w-fit select-none border-white/40 bg-transparent text-white">Optimización landing MBA</li>
+                </ul>
+                </div>
+              </div>
+            </article>
+
+            <!-- Palanca: Vida útil — tile sólido T3 (DEC-REP-43-050) -->
+            <article class="bg-primary-azul-003 rounded-[4px] p-5 flex flex-col gap-2 xl:flex-1 min-w-0 text-white" data-lever="vida-util" data-tile="T3">
+              
+              
+              <div class="flex flex-col gap-1">
+                <div class="flex items-center gap-1">
+                <h3 class="font-outfit font-semibold text-[16px] leading-[1.3] text-white m-0">Vida útil</h3>
+                <span class="group relative inline-flex">
+                  <button type="button" class="inline-flex items-center justify-center w-5 h-5 rounded-full text-white hover:opacity-80 cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white hit-44" aria-label="¿De dónde sale Vida útil?" aria-describedby="source-vida-util" data-track="de-donde-sale"><svg viewBox="0 0 24 24" fill="currentColor" class="w-4 h-4" aria-hidden="true"><path d="M12 2.25C10.0716 2.25 8.18657 2.82183 6.58319 3.89317C4.97982 4.96451 3.73013 6.48726 2.99218 8.26884C2.25422 10.0504 2.06114 12.0108 2.43735 13.9021C2.81355 15.7934 3.74215 17.5307 5.10571 18.8943C6.46928 20.2579 8.20656 21.1865 10.0979 21.5627C11.9892 21.9389 13.9496 21.7458 15.7312 21.0078C17.5127 20.2699 19.0355 19.0202 20.1068 17.4168C21.1782 15.8134 21.75 13.9284 21.75 12C21.7473 9.41498 20.7192 6.93661 18.8913 5.10872C17.0634 3.28084 14.585 2.25273 12 2.25ZM12 20.25C10.3683 20.25 8.77326 19.7661 7.41655 18.8596C6.05984 17.9531 5.00242 16.6646 4.378 15.1571C3.75358 13.6496 3.5902 11.9908 3.90853 10.3905C4.22685 8.79016 5.01259 7.32015 6.16637 6.16637C7.32016 5.01259 8.79017 4.22685 10.3905 3.90852C11.9909 3.59019 13.6497 3.75357 15.1571 4.37799C16.6646 5.00242 17.9531 6.05984 18.8596 7.41655C19.7661 8.77325 20.25 10.3683 20.25 12C20.2475 14.1873 19.3775 16.2843 17.8309 17.8309C16.2843 19.3775 14.1873 20.2475 12 20.25ZM13.5 16.5C13.5 16.6989 13.421 16.8897 13.2803 17.0303C13.1397 17.171 12.9489 17.25 12.75 17.25C12.3522 17.25 11.9706 17.092 11.6893 16.8107C11.408 16.5294 11.25 16.1478 11.25 15.75V12C11.0511 12 10.8603 11.921 10.7197 11.7803C10.579 11.6397 10.5 11.4489 10.5 11.25C10.5 11.0511 10.579 10.8603 10.7197 10.7197C10.8603 10.579 11.0511 10.5 11.25 10.5C11.6478 10.5 12.0294 10.658 12.3107 10.9393C12.592 11.2206 12.75 11.6022 12.75 12V15.75C12.9489 15.75 13.1397 15.829 13.2803 15.9697C13.421 16.1103 13.5 16.3011 13.5 16.5ZM10.5 7.875C10.5 7.6525 10.566 7.43499 10.6896 7.24998C10.8132 7.06498 10.9889 6.92078 11.1945 6.83564C11.4001 6.75049 11.6263 6.72821 11.8445 6.77162C12.0627 6.81502 12.2632 6.92217 12.4205 7.0795C12.5778 7.23684 12.685 7.43729 12.7284 7.65552C12.7718 7.87375 12.7495 8.09995 12.6644 8.30552C12.5792 8.51109 12.435 8.68679 12.25 8.8104C12.065 8.93402 11.8475 9 11.625 9C11.3266 9 11.0405 8.88147 10.8295 8.6705C10.6185 8.45952 10.5 8.17337 10.5 7.875Z"/></svg></button>
+                  <div id="source-vida-util" role="tooltip" class="hidden border border-white/20 group-hover:block group-focus:block group-focus-within:block absolute top-[calc(100%+4px)] left-0 z-50 bg-cesa-blue-dark text-neutral-100 font-outfit font-light text-[14px] md:text-xs leading-[1.4] md:leading-[1.3] px-3 py-3 md:py-2 rounded-xs w-[280px] max-w-[calc(100vw-32px)] text-left">
+                    <p class="m-0"><span class="font-medium">Qué es:</span> cuántos años se queda un cliente comprando.</p>
+                    <p class="m-0 mt-1"><span class="font-medium">Fórmula:</span> promedio de meses entre la primera y la última compra, de los compradores con más de una compra. Estimación provisional: ignora a quienes compraron una sola vez; se reemplaza por 1 ÷ abandono anual cuando haya 24 meses de historia.</p>
+                    <p class="m-0 mt-1"><span class="font-medium">Fuente:</span> pagos de C4L (Ecollect).</p>
+                    <p class="m-0 mt-1"><span class="font-medium">Frecuencia:</span> semanal, estimación provisional.</p>
+                    <p class="m-0 mt-1"><span class="font-medium">Modo:</span> línea base en construcción.</p>
+                    <p class="m-0 mt-1"><span class="font-medium">Activo:</span> C4L.</p>
+                    <p class="m-0 mt-1"><span class="font-medium">Guardrail:</span> la palanca que no debe empeorar al mover esta.</p>
+                  </div>
+                </span>
+              </div>
+                <p class="font-outfit font-light text-[14px] leading-[1.3] text-neutral-100 m-0">¿Qué evita que se vaya?</p>
+              </div>
+              <span class="group relative inline-flex">
+                <button type="button" class="inline-flex items-center gap-1 px-2 py-1 rounded-full border text-[14px] md:text-[12px] font-outfit font-light leading-[1.3] w-fit whitespace-nowrap border-white text-white cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white hit-44-chip" data-maturity="linea-base" aria-describedby="maturity-vida-util-levers">
+                <span class="inline-flex items-center justify-center w-4 h-4 shrink-0"><svg viewBox="0 0 24 24" fill="currentColor" class="w-3 h-3" aria-hidden="true"><path d="M12 2.25C10.0716 2.25 8.18657 2.82183 6.58319 3.89317C4.97982 4.96451 3.73013 6.48726 2.99218 8.26884C2.25422 10.0504 2.06114 12.0108 2.43735 13.9021C2.81355 15.7934 3.74215 17.5307 5.10571 18.8943C6.46928 20.2579 8.20656 21.1865 10.0979 21.5627C11.9892 21.9389 13.9496 21.7458 15.7312 21.0078C17.5127 20.2699 19.0355 19.0202 20.1068 17.4168C21.1782 15.8134 21.75 13.9284 21.75 12C21.7473 9.41498 20.7192 6.93661 18.8913 5.10872C17.0634 3.28084 14.585 2.25273 12 2.25ZM12 20.25C10.3683 20.25 8.77326 19.7661 7.41655 18.8596C6.05984 17.9531 5.00242 16.6646 4.378 15.1571C3.75358 13.6496 3.5902 11.9908 3.90853 10.3905C4.22685 8.79016 5.01259 7.32015 6.16637 6.16637C7.32016 5.01259 8.79017 4.22685 10.3905 3.90852C11.9909 3.59019 13.6497 3.75357 15.1571 4.37799C16.6646 5.00242 17.9531 6.05984 18.8596 7.41655C19.7661 8.77325 20.25 10.3683 20.25 12C20.2475 14.1873 19.3775 16.2843 17.8309 17.8309C16.2843 19.3775 14.1873 20.2475 12 20.25ZM13.5 16.5C13.5 16.6989 13.421 16.8897 13.2803 17.0303C13.1397 17.171 12.9489 17.25 12.75 17.25C12.3522 17.25 11.9706 17.092 11.6893 16.8107C11.408 16.5294 11.25 16.1478 11.25 15.75V12C11.0511 12 10.8603 11.921 10.7197 11.7803C10.579 11.6397 10.5 11.4489 10.5 11.25C10.5 11.0511 10.579 10.8603 10.7197 10.7197C10.8603 10.579 11.0511 10.5 11.25 10.5C11.6478 10.5 12.0294 10.658 12.3107 10.9393C12.592 11.2206 12.75 11.6022 12.75 12V15.75C12.9489 15.75 13.1397 15.829 13.2803 15.9697C13.421 16.1103 13.5 16.3011 13.5 16.5ZM10.5 7.875C10.5 7.6525 10.566 7.43499 10.6896 7.24998C10.8132 7.06498 10.9889 6.92078 11.1945 6.83564C11.4001 6.75049 11.6263 6.72821 11.8445 6.77162C12.0627 6.81502 12.2632 6.92217 12.4205 7.0795C12.5778 7.23684 12.685 7.43729 12.7284 7.65552C12.7718 7.87375 12.7495 8.09995 12.6644 8.30552C12.5792 8.51109 12.435 8.68679 12.25 8.8104C12.065 8.93402 11.8475 9 11.625 9C11.3266 9 11.0405 8.88147 10.8295 8.6705C10.6185 8.45952 10.5 8.17337 10.5 7.875Z"/></svg></span>
+                Línea base en construcción
+                </button>
+                <div id="maturity-vida-util-levers" role="tooltip" class="hidden border border-white/20 group-hover:block group-focus:block group-focus-within:block absolute top-[calc(100%+4px)] right-0 z-50 bg-cesa-blue-dark text-neutral-100 font-outfit font-light text-[14px] md:text-xs leading-[1.4] md:leading-[1.3] px-3 py-3 md:py-2 rounded-xs w-[280px] max-w-[calc(100vw-32px)] text-left">
+                  <p class="m-0"><span class="font-medium">Qué es:</span> la métrica todavía no se mide. Fuente y fórmula están definidas, pero aún no hay datos.</p>
+                </div>
+              </span>
+              <!-- Panel interno blanco (DEC-REP-43-053): solo «Dato de hoy»; se ajusta a su contenido, sin alto fijo -->
+              <div data-state="default empty-week source-error">
+                <div class="bg-white rounded-[4px] p-3 flex flex-col gap-1 min-w-0" data-lever-panel data-baseline-block="vida-util">
+                  <p class="flex flex-wrap items-center gap-2 font-outfit font-light text-[14px] md:text-[12px] leading-[1.3] text-neutral-600 m-0">Dato de hoy <span class="text-[12px] uppercase tracking-wide font-medium text-neutral-600">Ejemplo</span></p>
+                  <p class="font-outfit font-bold text-[28px] leading-none tracking-[-1px] tabular-nums text-cesa-blue-dark m-0">2,3 <span class="text-[14px] font-light text-neutral-600">años</span></p>
+                </div>
+              </div>
+              <div data-state="loading">
+                <div class="rounded-[4px] w-full h-16 bg-neutral-200 motion-safe:animate-skeleton-pulse" aria-hidden="true"></div>
+              </div>
+              <div class="flex flex-col gap-2 mt-auto" data-lever-foot>
+                <div class="flex flex-col gap-1 min-w-0">
+                  <p class="font-outfit font-light text-[14px] md:text-[12px] leading-[1.3] text-neutral-100 m-0">Línea base</p>
+                  <p class="font-outfit font-bold text-[16px] leading-none tracking-[-1px] tabular-nums text-white m-0">2,1 <span class="text-[14px] md:text-[12px] font-light text-neutral-100">años</span></p>
+                </div>
+                <p class="font-outfit text-[14px] md:text-[12px] leading-[1.3] m-0"><span class="font-light text-neutral-100">Guardrail:</span> <span class="font-medium text-white">Costo de servir (COGS)</span></p>
+                <div class="flex flex-col gap-1">
+                  <p class="font-outfit font-light text-[14px] md:text-[12px] leading-[1.3] text-neutral-100 m-0">Bets priorizadas:</p>
+                  <ul class="flex flex-wrap gap-1 list-none m-0 p-0">
+                  <li class="inline-flex items-center px-2 py-1 rounded-full border text-[14px] md:text-[12px] font-outfit font-light leading-[1.3] w-fit select-none border-white/40 bg-transparent text-white">Seguimiento post-cohorte</li>
+                </ul>
+                </div>
+              </div>
+            </article>
+
+            <!-- Palanca: CAC — tile sólido T4 (DEC-REP-43-050) -->
+            <article class="bg-primary-azul-005 rounded-[4px] p-5 flex flex-col gap-2 xl:flex-1 min-w-0 text-white" data-lever="cac" data-tile="T4">
+              
+              
+              <div class="flex flex-col gap-1">
+                <div class="flex items-center gap-1">
+                <h3 class="font-outfit font-semibold text-[16px] leading-[1.3] text-white m-0">CAC</h3>
+                <span class="group relative inline-flex">
+                  <button type="button" class="inline-flex items-center justify-center w-5 h-5 rounded-full text-white hover:opacity-80 cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white hit-44" aria-label="¿De dónde sale CAC?" aria-describedby="source-cac-palanca" data-track="de-donde-sale"><svg viewBox="0 0 24 24" fill="currentColor" class="w-4 h-4" aria-hidden="true"><path d="M12 2.25C10.0716 2.25 8.18657 2.82183 6.58319 3.89317C4.97982 4.96451 3.73013 6.48726 2.99218 8.26884C2.25422 10.0504 2.06114 12.0108 2.43735 13.9021C2.81355 15.7934 3.74215 17.5307 5.10571 18.8943C6.46928 20.2579 8.20656 21.1865 10.0979 21.5627C11.9892 21.9389 13.9496 21.7458 15.7312 21.0078C17.5127 20.2699 19.0355 19.0202 20.1068 17.4168C21.1782 15.8134 21.75 13.9284 21.75 12C21.7473 9.41498 20.7192 6.93661 18.8913 5.10872C17.0634 3.28084 14.585 2.25273 12 2.25ZM12 20.25C10.3683 20.25 8.77326 19.7661 7.41655 18.8596C6.05984 17.9531 5.00242 16.6646 4.378 15.1571C3.75358 13.6496 3.5902 11.9908 3.90853 10.3905C4.22685 8.79016 5.01259 7.32015 6.16637 6.16637C7.32016 5.01259 8.79017 4.22685 10.3905 3.90852C11.9909 3.59019 13.6497 3.75357 15.1571 4.37799C16.6646 5.00242 17.9531 6.05984 18.8596 7.41655C19.7661 8.77325 20.25 10.3683 20.25 12C20.2475 14.1873 19.3775 16.2843 17.8309 17.8309C16.2843 19.3775 14.1873 20.2475 12 20.25ZM13.5 16.5C13.5 16.6989 13.421 16.8897 13.2803 17.0303C13.1397 17.171 12.9489 17.25 12.75 17.25C12.3522 17.25 11.9706 17.092 11.6893 16.8107C11.408 16.5294 11.25 16.1478 11.25 15.75V12C11.0511 12 10.8603 11.921 10.7197 11.7803C10.579 11.6397 10.5 11.4489 10.5 11.25C10.5 11.0511 10.579 10.8603 10.7197 10.7197C10.8603 10.579 11.0511 10.5 11.25 10.5C11.6478 10.5 12.0294 10.658 12.3107 10.9393C12.592 11.2206 12.75 11.6022 12.75 12V15.75C12.9489 15.75 13.1397 15.829 13.2803 15.9697C13.421 16.1103 13.5 16.3011 13.5 16.5ZM10.5 7.875C10.5 7.6525 10.566 7.43499 10.6896 7.24998C10.8132 7.06498 10.9889 6.92078 11.1945 6.83564C11.4001 6.75049 11.6263 6.72821 11.8445 6.77162C12.0627 6.81502 12.2632 6.92217 12.4205 7.0795C12.5778 7.23684 12.685 7.43729 12.7284 7.65552C12.7718 7.87375 12.7495 8.09995 12.6644 8.30552C12.5792 8.51109 12.435 8.68679 12.25 8.8104C12.065 8.93402 11.8475 9 11.625 9C11.3266 9 11.0405 8.88147 10.8295 8.6705C10.6185 8.45952 10.5 8.17337 10.5 7.875Z"/></svg></button>
+                  <div id="source-cac-palanca" role="tooltip" class="hidden border border-white/20 group-hover:block group-focus:block group-focus-within:block absolute top-[calc(100%+4px)] left-0 z-50 bg-cesa-blue-dark text-neutral-100 font-outfit font-light text-[14px] md:text-xs leading-[1.4] md:leading-[1.3] px-3 py-3 md:py-2 rounded-xs w-[280px] max-w-[calc(100vw-32px)] text-left">
+                    <p class="m-0"><span class="font-medium">Qué es:</span> cuánto costó traer a cada cliente nuevo.</p>
+                    <p class="m-0 mt-1"><span class="font-medium">Fórmula:</span> inversión de la semana en campañas C4L_ ÷ todos los compradores nuevos de la semana (CAC combinado: vengan de pauta u orgánico), en pesos con la tasa del período.</p>
+                    <p class="m-0 mt-1"><span class="font-medium">Fuente:</span> Meta Ads vía Amplitude (Google Ads solo para CESA web); compradores nuevos desde la base de C4L.</p>
+                    <p class="m-0 mt-1"><span class="font-medium">Frecuencia:</span> semanal.</p>
+                    <p class="m-0 mt-1"><span class="font-medium">Modo:</span> automático cuando Amplitude tenga la fuente conectada; mientras tanto carga manual en Notion.</p>
+                    <p class="m-0 mt-1"><span class="font-medium">Activo:</span> C4L (inversión de campañas C4L_ en Meta Ads vía Amplitude; Google Ads solo CESA web).</p>
+                    <p class="m-0 mt-1"><span class="font-medium">Guardrail:</span> la palanca que no debe empeorar al mover esta.</p>
+                  </div>
+                </span>
+              </div>
+                <p class="font-outfit font-light text-[14px] leading-[1.3] text-white m-0">¿Qué abarata conseguirlo?</p>
+              </div>
+              <span class="group relative inline-flex">
+                <button type="button" class="inline-flex items-center gap-1 px-2 py-1 rounded-full border text-[14px] md:text-[12px] font-outfit font-light leading-[1.3] w-fit whitespace-nowrap border-white text-white cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white hit-44-chip" data-maturity="medicion-activa" aria-describedby="maturity-cac-levers">
+                <span class="inline-flex items-center justify-center w-4 h-4 shrink-0"><svg viewBox="0 0 18 18" fill="currentColor" class="w-3 h-3" aria-hidden="true"><path d="M12.2105 6.91453C12.2628 6.96677 12.3043 7.02881 12.3326 7.0971C12.3609 7.16538 12.3754 7.23858 12.3754 7.3125C12.3754 7.38642 12.3609 7.45962 12.3326 7.5279C12.3043 7.59619 12.2628 7.65823 12.2105 7.71047L8.27297 11.648C8.22073 11.7003 8.15869 11.7418 8.09041 11.7701C8.02212 11.7984 7.94892 11.8129 7.875 11.8129C7.80108 11.8129 7.72789 11.7984 7.6596 11.7701C7.59131 11.7418 7.52928 11.7003 7.47703 11.648L5.78953 9.96047C5.68399 9.85492 5.62469 9.71177 5.62469 9.5625C5.62469 9.41323 5.68399 9.27008 5.78953 9.16453C5.89508 9.05898 6.03824 8.99969 6.1875 8.99969C6.33677 8.99969 6.47992 9.05898 6.58547 9.16453L7.875 10.4548L11.4145 6.91453C11.4668 6.86223 11.5288 6.82074 11.5971 6.79244C11.6654 6.76413 11.7386 6.74956 11.8125 6.74956C11.8864 6.74956 11.9596 6.76413 12.0279 6.79244C12.0962 6.82074 12.1582 6.86223 12.2105 6.91453ZM16.3125 9C16.3125 10.4463 15.8836 11.8601 15.0801 13.0626C14.2766 14.2651 13.1346 15.2024 11.7984 15.7559C10.4622 16.3093 8.99189 16.4541 7.57341 16.172C6.15492 15.8898 4.85196 15.1934 3.82928 14.1707C2.80661 13.148 2.11017 11.8451 1.82801 10.4266C1.54586 9.00811 1.69067 7.53781 2.24413 6.20163C2.7976 4.86544 3.73486 3.72339 4.9374 2.91988C6.13993 2.11637 7.55373 1.6875 9 1.6875C10.9388 1.68955 12.7975 2.46063 14.1685 3.83154C15.5394 5.20246 16.3105 7.06123 16.3125 9ZM15.1875 9C15.1875 7.77623 14.8246 6.57994 14.1447 5.56241C13.4648 4.54488 12.4985 3.75181 11.3679 3.2835C10.2372 2.81518 8.99314 2.69265 7.79288 2.93139C6.59262 3.17014 5.49012 3.75944 4.62478 4.62478C3.75944 5.49011 3.17014 6.59262 2.93139 7.79288C2.69265 8.99314 2.81518 10.2372 3.2835 11.3679C3.75182 12.4985 4.54488 13.4648 5.56241 14.1447C6.57994 14.8246 7.77623 15.1875 9 15.1875C10.6405 15.1856 12.2132 14.5331 13.3732 13.3732C14.5331 12.2132 15.1856 10.6405 15.1875 9Z"/></svg></span>
+                Medición activa
+                </button>
+                <div id="maturity-cac-levers" role="tooltip" class="hidden border border-white/20 group-hover:block group-focus:block group-focus-within:block absolute top-[calc(100%+4px)] right-0 z-50 bg-cesa-blue-dark text-neutral-100 font-outfit font-light text-[14px] md:text-xs leading-[1.4] md:leading-[1.3] px-3 py-3 md:py-2 rounded-xs w-[280px] max-w-[calc(100vw-32px)] text-left">
+                  <p class="m-0"><span class="font-medium">Qué es:</span> la métrica se mide cada semana con fuente y fórmula definidas y ya tiene línea base. La comparación contra la semana anterior es válida.</p>
+                </div>
+              </span>
+              <!-- Panel interno blanco (DEC-REP-43-053): solo «Dato de hoy»; se ajusta a su contenido, sin alto fijo -->
+              <div data-state="default empty-week source-error">
+                <div class="bg-white rounded-[4px] p-3 flex flex-col gap-1 min-w-0" data-lever-panel data-baseline-block="cac">
+                  <p class="flex flex-wrap items-center gap-2 font-outfit font-light text-[14px] md:text-[12px] leading-[1.3] text-neutral-600 m-0">Dato de hoy</p>
+                  <p class="font-outfit font-bold text-[28px] leading-none tracking-[-1px] tabular-nums text-cesa-blue-dark m-0"><span class="text-[14px] font-light text-neutral-600">COP $</span> 412.000</p>
+                </div>
+              </div>
+              <div data-state="loading">
+                <div class="rounded-[4px] w-full h-16 bg-neutral-200 motion-safe:animate-skeleton-pulse" aria-hidden="true"></div>
+              </div>
+              <div class="flex flex-col gap-2 mt-auto" data-lever-foot>
+                <div class="flex flex-col gap-1 min-w-0">
+                  <p class="font-outfit font-light text-[14px] md:text-[12px] leading-[1.3] text-white m-0">Línea base</p>
+                  <p class="font-outfit font-bold text-[16px] leading-none tracking-[-1px] tabular-nums text-white m-0"><span class="text-[14px] md:text-[12px] font-light text-white">COP $</span> 435.000</p>
+                </div>
+                <p class="font-outfit text-[14px] md:text-[12px] leading-[1.3] m-0"><span class="font-light text-white">Guardrail:</span> <span class="font-medium text-white">Ticket y vida útil de la cohorte nueva</span></p>
+                <div class="flex flex-col gap-1">
+                  <p class="font-outfit font-light text-[14px] md:text-[12px] leading-[1.3] text-white m-0">Bets priorizadas:</p>
+                  <ul class="flex flex-wrap gap-1 list-none m-0 p-0">
+                  <li class="inline-flex items-center px-2 py-1 rounded-full border text-[14px] md:text-[12px] font-outfit font-light leading-[1.3] w-fit select-none border-white/40 bg-transparent text-white">Ajuste formulario Educación Continua</li>
+                  <li class="inline-flex items-center px-2 py-1 rounded-full border text-[14px] md:text-[12px] font-outfit font-light leading-[1.3] w-fit select-none border-white/40 bg-transparent text-white">Respuesta a leads en 15 min</li>
+                </ul>
+                </div>
+              </div>
+            </article>
+
+            <!-- Palanca: COGS — tile sólido T5 (DEC-REP-43-050) -->
+            <article class="bg-cesa-blue-dark rounded-[4px] p-5 flex flex-col gap-2 xl:flex-1 min-w-0 text-white" data-lever="cogs" data-tile="T5">
+              
+              
+              <div class="flex flex-col gap-1">
+                <div class="flex items-center gap-1">
+                <h3 class="font-outfit font-semibold text-[16px] leading-[1.3] text-white m-0">COGS</h3>
+                <span class="group relative inline-flex">
+                  <button type="button" class="inline-flex items-center justify-center w-5 h-5 rounded-full text-white hover:opacity-80 cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white hit-44" aria-label="¿De dónde sale COGS?" aria-describedby="source-cogs" data-track="de-donde-sale"><svg viewBox="0 0 24 24" fill="currentColor" class="w-4 h-4" aria-hidden="true"><path d="M12 2.25C10.0716 2.25 8.18657 2.82183 6.58319 3.89317C4.97982 4.96451 3.73013 6.48726 2.99218 8.26884C2.25422 10.0504 2.06114 12.0108 2.43735 13.9021C2.81355 15.7934 3.74215 17.5307 5.10571 18.8943C6.46928 20.2579 8.20656 21.1865 10.0979 21.5627C11.9892 21.9389 13.9496 21.7458 15.7312 21.0078C17.5127 20.2699 19.0355 19.0202 20.1068 17.4168C21.1782 15.8134 21.75 13.9284 21.75 12C21.7473 9.41498 20.7192 6.93661 18.8913 5.10872C17.0634 3.28084 14.585 2.25273 12 2.25ZM12 20.25C10.3683 20.25 8.77326 19.7661 7.41655 18.8596C6.05984 17.9531 5.00242 16.6646 4.378 15.1571C3.75358 13.6496 3.5902 11.9908 3.90853 10.3905C4.22685 8.79016 5.01259 7.32015 6.16637 6.16637C7.32016 5.01259 8.79017 4.22685 10.3905 3.90852C11.9909 3.59019 13.6497 3.75357 15.1571 4.37799C16.6646 5.00242 17.9531 6.05984 18.8596 7.41655C19.7661 8.77325 20.25 10.3683 20.25 12C20.2475 14.1873 19.3775 16.2843 17.8309 17.8309C16.2843 19.3775 14.1873 20.2475 12 20.25ZM13.5 16.5C13.5 16.6989 13.421 16.8897 13.2803 17.0303C13.1397 17.171 12.9489 17.25 12.75 17.25C12.3522 17.25 11.9706 17.092 11.6893 16.8107C11.408 16.5294 11.25 16.1478 11.25 15.75V12C11.0511 12 10.8603 11.921 10.7197 11.7803C10.579 11.6397 10.5 11.4489 10.5 11.25C10.5 11.0511 10.579 10.8603 10.7197 10.7197C10.8603 10.579 11.0511 10.5 11.25 10.5C11.6478 10.5 12.0294 10.658 12.3107 10.9393C12.592 11.2206 12.75 11.6022 12.75 12V15.75C12.9489 15.75 13.1397 15.829 13.2803 15.9697C13.421 16.1103 13.5 16.3011 13.5 16.5ZM10.5 7.875C10.5 7.6525 10.566 7.43499 10.6896 7.24998C10.8132 7.06498 10.9889 6.92078 11.1945 6.83564C11.4001 6.75049 11.6263 6.72821 11.8445 6.77162C12.0627 6.81502 12.2632 6.92217 12.4205 7.0795C12.5778 7.23684 12.685 7.43729 12.7284 7.65552C12.7718 7.87375 12.7495 8.09995 12.6644 8.30552C12.5792 8.51109 12.435 8.68679 12.25 8.8104C12.065 8.93402 11.8475 9 11.625 9C11.3266 9 11.0405 8.88147 10.8295 8.6705C10.6185 8.45952 10.5 8.17337 10.5 7.875Z"/></svg></button>
+                  <div id="source-cogs" role="tooltip" class="hidden border border-white/20 group-hover:block group-focus:block group-focus-within:block absolute top-[calc(100%+4px)] right-0 z-50 bg-cesa-blue-dark text-neutral-100 font-outfit font-light text-[14px] md:text-xs leading-[1.4] md:leading-[1.3] px-3 py-3 md:py-2 rounded-xs w-[280px] max-w-[calc(100vw-32px)] text-left">
+                    <p class="m-0"><span class="font-medium">Qué es:</span> costo de servir una cohorte.</p>
+                    <p class="m-0 mt-1"><span class="font-medium">Fórmula:</span> (horas persona estimadas × costo por hora + herramientas y soporte) ÷ cohortes servidas.</p>
+                    <p class="m-0 mt-1"><span class="font-medium">Fuente:</span> Horas persona = tiempo de resolución de los reportes resueltos por personas (Notion). Costo por hora y herramientas: los entrega Finanzas o RR. HH. Cohortes: base de C4L.</p>
+                    <p class="m-0 mt-1"><span class="font-medium">Frecuencia:</span> semanal.</p>
+                    <p class="m-0 mt-1"><span class="font-medium">Modo:</span> mixto. Es un proxy: mide tiempo transcurrido, no esfuerzo.</p>
+                    <p class="m-0 mt-1"><span class="font-medium">Ahorro COGS:</span> horas eliminadas por el Golem = reportes resueltos por el Golem × tiempo promedio de resolución de una persona × costo por hora.</p>
+                    <p class="m-0 mt-1"><span class="font-medium">Activo:</span> C4L.</p>
+                    <p class="m-0 mt-1"><span class="font-medium">Guardrail:</span> la palanca que no debe empeorar al mover esta.</p>
+                  </div>
+                </span>
+              </div>
+                <p class="font-outfit font-light text-[14px] leading-[1.3] text-neutral-100 m-0">¿Qué trabajo manual elimina?</p>
+              </div>
+              <span class="group relative inline-flex">
+                <button type="button" class="inline-flex items-center gap-1 px-2 py-1 rounded-full border text-[14px] md:text-[12px] font-outfit font-light leading-[1.3] w-fit whitespace-nowrap border-white text-white cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white hit-44-chip" data-maturity="medicion-activa" aria-describedby="maturity-cogs-levers">
+                <span class="inline-flex items-center justify-center w-4 h-4 shrink-0"><svg viewBox="0 0 18 18" fill="currentColor" class="w-3 h-3" aria-hidden="true"><path d="M12.2105 6.91453C12.2628 6.96677 12.3043 7.02881 12.3326 7.0971C12.3609 7.16538 12.3754 7.23858 12.3754 7.3125C12.3754 7.38642 12.3609 7.45962 12.3326 7.5279C12.3043 7.59619 12.2628 7.65823 12.2105 7.71047L8.27297 11.648C8.22073 11.7003 8.15869 11.7418 8.09041 11.7701C8.02212 11.7984 7.94892 11.8129 7.875 11.8129C7.80108 11.8129 7.72789 11.7984 7.6596 11.7701C7.59131 11.7418 7.52928 11.7003 7.47703 11.648L5.78953 9.96047C5.68399 9.85492 5.62469 9.71177 5.62469 9.5625C5.62469 9.41323 5.68399 9.27008 5.78953 9.16453C5.89508 9.05898 6.03824 8.99969 6.1875 8.99969C6.33677 8.99969 6.47992 9.05898 6.58547 9.16453L7.875 10.4548L11.4145 6.91453C11.4668 6.86223 11.5288 6.82074 11.5971 6.79244C11.6654 6.76413 11.7386 6.74956 11.8125 6.74956C11.8864 6.74956 11.9596 6.76413 12.0279 6.79244C12.0962 6.82074 12.1582 6.86223 12.2105 6.91453ZM16.3125 9C16.3125 10.4463 15.8836 11.8601 15.0801 13.0626C14.2766 14.2651 13.1346 15.2024 11.7984 15.7559C10.4622 16.3093 8.99189 16.4541 7.57341 16.172C6.15492 15.8898 4.85196 15.1934 3.82928 14.1707C2.80661 13.148 2.11017 11.8451 1.82801 10.4266C1.54586 9.00811 1.69067 7.53781 2.24413 6.20163C2.7976 4.86544 3.73486 3.72339 4.9374 2.91988C6.13993 2.11637 7.55373 1.6875 9 1.6875C10.9388 1.68955 12.7975 2.46063 14.1685 3.83154C15.5394 5.20246 16.3105 7.06123 16.3125 9ZM15.1875 9C15.1875 7.77623 14.8246 6.57994 14.1447 5.56241C13.4648 4.54488 12.4985 3.75181 11.3679 3.2835C10.2372 2.81518 8.99314 2.69265 7.79288 2.93139C6.59262 3.17014 5.49012 3.75944 4.62478 4.62478C3.75944 5.49011 3.17014 6.59262 2.93139 7.79288C2.69265 8.99314 2.81518 10.2372 3.2835 11.3679C3.75182 12.4985 4.54488 13.4648 5.56241 14.1447C6.57994 14.8246 7.77623 15.1875 9 15.1875C10.6405 15.1856 12.2132 14.5331 13.3732 13.3732C14.5331 12.2132 15.1856 10.6405 15.1875 9Z"/></svg></span>
+                Medición activa · Ahorro COGS
+                </button>
+                <div id="maturity-cogs-levers" role="tooltip" class="hidden border border-white/20 group-hover:block group-focus:block group-focus-within:block absolute top-[calc(100%+4px)] right-0 z-50 bg-cesa-blue-dark text-neutral-100 font-outfit font-light text-[14px] md:text-xs leading-[1.4] md:leading-[1.3] px-3 py-3 md:py-2 rounded-xs w-[280px] max-w-[calc(100vw-32px)] text-left">
+                  <p class="m-0"><span class="font-medium">Qué es:</span> la métrica se mide cada semana con fuente y fórmula definidas y ya tiene línea base. La comparación contra la semana anterior es válida.</p>
+                </div>
+              </span>
+              <!-- Panel interno blanco (DEC-REP-43-053): solo «Dato de hoy»; se ajusta a su contenido, sin alto fijo -->
+              <div data-state="default empty-week source-error">
+                <div class="bg-white rounded-[4px] p-3 flex flex-col gap-1 min-w-0" data-lever-panel data-baseline-block="cogs">
+                  <p class="flex flex-wrap items-center gap-2 font-outfit font-light text-[14px] md:text-[12px] leading-[1.3] text-neutral-600 m-0">Dato de hoy <span class="font-outfit font-light text-[14px] md:text-[12px] leading-[1.3] text-neutral-600">por cohorte</span></p>
+                  <p class="font-outfit font-bold text-[28px] leading-none tracking-[-1px] tabular-nums text-cesa-blue-dark m-0"><span class="text-[14px] font-light text-neutral-600">COP $</span> 1.180.000</p>
+                </div>
+              </div>
+              <div data-state="loading">
+                <div class="rounded-[4px] w-full h-16 bg-neutral-200 motion-safe:animate-skeleton-pulse" aria-hidden="true"></div>
+              </div>
+              <div class="flex flex-col gap-2 mt-auto" data-lever-foot>
+                <div class="flex flex-col gap-1 min-w-0">
+                  <p class="font-outfit font-light text-[14px] md:text-[12px] leading-[1.3] text-neutral-100 m-0">Línea base</p>
+                  <p class="font-outfit font-bold text-[16px] leading-none tracking-[-1px] tabular-nums text-white m-0"><span class="text-[14px] md:text-[12px] font-light text-neutral-100">COP $</span> 1.250.000</p>
+                </div>
+                <p class="font-outfit text-[14px] md:text-[12px] leading-[1.3] m-0"><span class="font-light text-neutral-100">Guardrail:</span> <span class="font-medium text-white">Vida útil y satisfacción</span></p>
+                <div class="flex flex-col gap-1">
+                  <p class="font-outfit font-light text-[14px] md:text-[12px] leading-[1.3] text-neutral-100 m-0">Bets priorizadas:</p>
+                  <ul class="flex flex-wrap gap-1 list-none m-0 p-0">
+                  <li class="inline-flex items-center px-2 py-1 rounded-full border text-[14px] md:text-[12px] font-outfit font-light leading-[1.3] w-fit select-none border-white/40 bg-transparent text-white">Automatización reportes marketing</li>
+                  <li class="inline-flex items-center px-2 py-1 rounded-full border text-[14px] md:text-[12px] font-outfit font-light leading-[1.3] w-fit select-none border-white/40 bg-transparent text-white">Golem atiende reportes</li>
+                </ul>
+                </div>
+              </div>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================================================================
+           PESTAÑA SEGUIMIENTO — ¿Qué estamos ejecutando y qué resultados está produciendo?
+           ================================================================ -->
+      <section id="panel-tracking" role="tabpanel" aria-labelledby="tab-tracking" tabindex="0" data-tab-panel="tracking"
+               class="hidden focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cesa-blue">
+        <h2 class="sr-only">Seguimiento</h2>
+        <div class="flex flex-col gap-2">
+          <div class="flex items-stretch gap-3 min-w-0">
+            <div class="shrink-0 self-stretch w-1.5 bg-cesa-blue rounded-[2px]" aria-hidden="true"></div>
+            <h2 class="font-outfit font-semibold text-[24px] leading-none text-cesa-blue-dark m-0">¿Qué estamos ejecutando y qué resultados está produciendo?</h2>
+          </div>
+
+          <!-- Evidencia Operacional: tiles sólidos (DEC-REP-43-050) + gráfico de barras CSS que llena la altura de su columna -->
+          <section class="bg-white rounded-[4px] shadow-sm hover:shadow-md transition-shadow px-3 py-2 flex flex-col gap-1" aria-labelledby="evidence-title" data-section="evidencia-operacional">
+            <div class="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+              <div class="flex flex-col gap-1 min-w-0">
+                <h3 id="evidence-title" class="font-outfit font-semibold text-[18px] leading-[1.3] text-cesa-blue-dark m-0">Evidencia Operacional</h3>
+                <p class="font-outfit font-light text-[14px] md:text-[12px] leading-[1.3] text-neutral-600 m-0">Métricas consumidas automáticamente desde Notion, donde la célula registra su trabajo en bets.</p>
+              </div>
+
+              <!-- Atoms/_FreshnessBadge (misma lectura que el badge del contexto; acá sin aria-live para no duplicar anuncios) -->
+              <div class="shrink-0">
+                <div data-state="default empty-week">
+                  <span class="inline-flex items-center gap-1.5 px-2 py-1 rounded-[4px] border border-neutral-300 bg-white text-base font-light leading-[1.3] w-fit">
+                    <span class="text-neutral-600">Última actualización 01/11/2026 14:35</span>
+                  </span>
+                </div>
+                <div data-state="source-error">
+                  <span class="inline-flex items-center gap-1.5 px-2 py-1 rounded-[4px] border border-cesa-orange bg-warning-alpha-10 text-base font-light leading-[1.3] w-fit">
+                    <span class="inline-flex items-center justify-center w-5 h-5 shrink-0"><img src="../assets/images/svg/IconWarning.svg" alt="" class="w-4 h-4 shrink-0" aria-hidden="true"></span>
+                    <span class="text-primary-azul-004">Última actualización conocida: 01/11/2026 09:15</span>
+                  </span>
+                </div>
+                <div data-state="loading">
+                  <span class="inline-flex items-center gap-1.5 px-2 py-1 rounded-[4px] border border-neutral-300 bg-white text-base font-light leading-[1.3] w-fit">
+                    <span class="text-neutral-600">Actualizando…</span>
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <div class="grid grid-cols-1 xl:grid-cols-2 gap-3">
+
+              <!-- (a) + (b): dos grupos de tres tiles apilados en una columna (cifra · subtítulo · delta), sin ícono -->
+              <div class="flex flex-col gap-2 min-w-0">
+                <div class="flex flex-col gap-1 min-w-0" data-metric="reportes-atendidos">
+                  <div class="flex flex-wrap items-center justify-between gap-2">
+                    <div class="flex items-center gap-1">
+                      <h4 class="font-outfit font-semibold text-[14px] leading-[1.3] text-cesa-blue-dark m-0">Reportes atendidos</h4>
+                      <span class="group relative inline-flex">
+                  <button type="button" class="inline-flex items-center justify-center w-5 h-5 rounded-full text-neutral-600 hover:text-cesa-blue cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cesa-blue hit-44" aria-label="¿De dónde sale Reportes atendidos?" aria-describedby="source-reportes-atendidos" data-track="de-donde-sale"><svg viewBox="0 0 24 24" fill="currentColor" class="w-4 h-4" aria-hidden="true"><path d="M12 2.25C10.0716 2.25 8.18657 2.82183 6.58319 3.89317C4.97982 4.96451 3.73013 6.48726 2.99218 8.26884C2.25422 10.0504 2.06114 12.0108 2.43735 13.9021C2.81355 15.7934 3.74215 17.5307 5.10571 18.8943C6.46928 20.2579 8.20656 21.1865 10.0979 21.5627C11.9892 21.9389 13.9496 21.7458 15.7312 21.0078C17.5127 20.2699 19.0355 19.0202 20.1068 17.4168C21.1782 15.8134 21.75 13.9284 21.75 12C21.7473 9.41498 20.7192 6.93661 18.8913 5.10872C17.0634 3.28084 14.585 2.25273 12 2.25ZM12 20.25C10.3683 20.25 8.77326 19.7661 7.41655 18.8596C6.05984 17.9531 5.00242 16.6646 4.378 15.1571C3.75358 13.6496 3.5902 11.9908 3.90853 10.3905C4.22685 8.79016 5.01259 7.32015 6.16637 6.16637C7.32016 5.01259 8.79017 4.22685 10.3905 3.90852C11.9909 3.59019 13.6497 3.75357 15.1571 4.37799C16.6646 5.00242 17.9531 6.05984 18.8596 7.41655C19.7661 8.77325 20.25 10.3683 20.25 12C20.2475 14.1873 19.3775 16.2843 17.8309 17.8309C16.2843 19.3775 14.1873 20.2475 12 20.25ZM13.5 16.5C13.5 16.6989 13.421 16.8897 13.2803 17.0303C13.1397 17.171 12.9489 17.25 12.75 17.25C12.3522 17.25 11.9706 17.092 11.6893 16.8107C11.408 16.5294 11.25 16.1478 11.25 15.75V12C11.0511 12 10.8603 11.921 10.7197 11.7803C10.579 11.6397 10.5 11.4489 10.5 11.25C10.5 11.0511 10.579 10.8603 10.7197 10.7197C10.8603 10.579 11.0511 10.5 11.25 10.5C11.6478 10.5 12.0294 10.658 12.3107 10.9393C12.592 11.2206 12.75 11.6022 12.75 12V15.75C12.9489 15.75 13.1397 15.829 13.2803 15.9697C13.421 16.1103 13.5 16.3011 13.5 16.5ZM10.5 7.875C10.5 7.6525 10.566 7.43499 10.6896 7.24998C10.8132 7.06498 10.9889 6.92078 11.1945 6.83564C11.4001 6.75049 11.6263 6.72821 11.8445 6.77162C12.0627 6.81502 12.2632 6.92217 12.4205 7.0795C12.5778 7.23684 12.685 7.43729 12.7284 7.65552C12.7718 7.87375 12.7495 8.09995 12.6644 8.30552C12.5792 8.51109 12.435 8.68679 12.25 8.8104C12.065 8.93402 11.8475 9 11.625 9C11.3266 9 11.0405 8.88147 10.8295 8.6705C10.6185 8.45952 10.5 8.17337 10.5 7.875Z"/></svg></button>
+                  <div id="source-reportes-atendidos" role="tooltip" class="hidden border border-white/20 group-hover:block group-focus:block group-focus-within:block absolute top-[calc(100%+4px)] left-0 z-50 bg-cesa-blue-dark text-neutral-100 font-outfit font-light text-[14px] md:text-xs leading-[1.4] md:leading-[1.3] px-3 py-3 md:py-2 rounded-xs w-[280px] max-w-[calc(100vw-32px)] text-left">
+                    <p class="m-0"><span class="font-medium">Qué es:</span> reportes del triage cerrados en la semana.</p>
+                    <p class="m-0 mt-1"><span class="font-medium">Fórmula:</span> conteo de reportes con fecha de cierre en la semana; Golem = resueltos por el agente (PR con etiqueta made-by-afk), Persona = resueltos por un miembro de la célula.</p>
+                    <p class="m-0 mt-1"><span class="font-medium">Fuente:</span> triage y Tracker en Notion.</p>
+                    <p class="m-0 mt-1"><span class="font-medium">Frecuencia:</span> tiempo real.</p>
+                    <p class="m-0 mt-1"><span class="font-medium">Modo:</span> automático.</p>
+                    <p class="m-0 mt-1"><span class="font-medium">Activo:</span> C4L.</p>
+                  </div>
+                </span>
+                    </div>
+                  </div>
+                  <div data-state="default">
+                    <ul class="grid grid-cols-1 md:grid-cols-3 gap-3 list-none m-0 p-0">
+                      <li class="bg-cesa-blue rounded-[4px] px-3 py-2 flex flex-col items-start gap-0.5 min-w-0 text-white" data-kpi="reportes" data-tile="T1">
+                        <p class="font-outfit font-bold text-[24px] leading-none tracking-[-1px] tabular-nums text-white m-0">23</p>
+                        <p class="font-outfit font-light text-[14px] md:text-[12px] leading-[1.3] text-neutral-100 m-0">reportes atendidos</p>
+                        <span class="inline-flex items-center gap-1 rounded-[4px] px-1.5 py-0.5 text-[14px] md:text-[12px] font-medium leading-none bg-success-50 text-success-contrast" data-delta="favorable"><span aria-hidden="true">▲</span><span class="sr-only">Sube</span> +4</span>
+                      </li>
+                      <li class="bg-primary-azul-002 rounded-[4px] px-3 py-2 flex flex-col items-start gap-0.5 min-w-0 text-white" data-kpi="golem" data-tile="T2">
+                        <p class="font-outfit font-bold text-[24px] leading-none tracking-[-1px] tabular-nums text-white m-0">14</p>
+                        <p class="font-outfit font-light text-[14px] md:text-[12px] leading-[1.3] text-neutral-100 m-0">Golem (agente automático)</p>
+                        <span class="inline-flex items-center gap-1 rounded-[4px] px-1.5 py-0.5 text-[14px] md:text-[12px] font-medium leading-none bg-success-50 text-success-contrast" data-delta="favorable"><span aria-hidden="true">▲</span><span class="sr-only">Sube</span> +3</span>
+                      </li>
+                      <li class="bg-primary-azul-003 rounded-[4px] px-3 py-2 flex flex-col items-start gap-0.5 min-w-0 text-white" data-kpi="persona" data-tile="T3">
+                        <p class="font-outfit font-bold text-[24px] leading-none tracking-[-1px] tabular-nums text-white m-0">9</p>
+                        <p class="font-outfit font-light text-[14px] md:text-[12px] leading-[1.3] text-neutral-100 m-0">persona <span class="sr-only">(miembro de la célula)</span></p>
+                        <span class="inline-flex items-center gap-1 rounded-[4px] px-1.5 py-0.5 text-[14px] md:text-[12px] font-medium leading-none bg-success-50 text-success-contrast" data-delta="favorable"><span aria-hidden="true">▲</span><span class="sr-only">Sube</span> +1</span>
+                      </li>
+                    </ul>
+                  </div>
+                  <div data-state="empty-week">
+                    <ul class="grid grid-cols-1 md:grid-cols-3 gap-3 list-none m-0 p-0">
+                      <li class="bg-cesa-blue rounded-[4px] px-3 py-2 flex flex-col items-start gap-0.5 min-w-0 text-white" data-kpi="reportes" data-tile="T1">
+                        <p class="font-outfit font-bold text-[24px] leading-none tracking-[-1px] tabular-nums text-white m-0"><span aria-hidden="true">—</span><span class="sr-only">Sin valor</span></p>
+                        <p class="font-outfit font-light text-[14px] md:text-[12px] leading-[1.3] text-neutral-100 m-0">reportes atendidos · ant. 19</p>
+                        
+                      </li>
+                      <li class="bg-primary-azul-002 rounded-[4px] px-3 py-2 flex flex-col items-start gap-0.5 min-w-0 text-white" data-kpi="golem" data-tile="T2">
+                        <p class="font-outfit font-bold text-[24px] leading-none tracking-[-1px] tabular-nums text-white m-0"><span aria-hidden="true">—</span><span class="sr-only">Sin valor</span></p>
+                        <p class="font-outfit font-light text-[14px] md:text-[12px] leading-[1.3] text-neutral-100 m-0">Golem (agente automático) · ant. 11</p>
+                        
+                      </li>
+                      <li class="bg-primary-azul-003 rounded-[4px] px-3 py-2 flex flex-col items-start gap-0.5 min-w-0 text-white" data-kpi="persona" data-tile="T3">
+                        <p class="font-outfit font-bold text-[24px] leading-none tracking-[-1px] tabular-nums text-white m-0"><span aria-hidden="true">—</span><span class="sr-only">Sin valor</span></p>
+                        <p class="font-outfit font-light text-[14px] md:text-[12px] leading-[1.3] text-neutral-100 m-0">persona <span class="sr-only">(miembro de la célula)</span> · ant. 8</p>
+                        
+                      </li>
+                    </ul>
+                  </div>
+                  <div data-state="source-error">
+                    <div class="flex flex-col items-center text-center gap-3 py-6 px-4 rounded-[4px] border border-neutral-200 bg-neutral-0" role="alert">
+                <p class="font-outfit font-light text-base leading-[1.3] text-neutral-600 max-w-md m-0">No pudimos leer los reportes atendidos. Intenta de nuevo.</p>
+                <button type="button" data-retry data-track="reintentar"
+                        class="max-w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 min-h-[44px] rounded-[2px] font-outfit font-light text-[16px] leading-[16px] cursor-pointer transition-colors border border-cesa-blue bg-transparent text-cesa-blue hover:bg-neutral-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cesa-blue">
+                  <span class="min-w-0 truncate whitespace-nowrap py-[3px]">Reintentar</span>
+                </button>
+              </div>
+                  </div>
+                  <div data-state="loading">
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-3"><div class="rounded-[4px] border border-neutral-200 bg-white p-3 flex flex-col gap-1" aria-hidden="true"><div class="rounded-[4px] w-2/3 h-6 bg-neutral-200 motion-safe:animate-skeleton-pulse"></div><div class="rounded-[4px] w-full h-4 bg-neutral-200 motion-safe:animate-skeleton-pulse"></div></div><div class="rounded-[4px] border border-neutral-200 bg-white p-3 flex flex-col gap-1" aria-hidden="true"><div class="rounded-[4px] w-2/3 h-6 bg-neutral-200 motion-safe:animate-skeleton-pulse"></div><div class="rounded-[4px] w-full h-4 bg-neutral-200 motion-safe:animate-skeleton-pulse"></div></div><div class="rounded-[4px] border border-neutral-200 bg-white p-3 flex flex-col gap-1" aria-hidden="true"><div class="rounded-[4px] w-2/3 h-6 bg-neutral-200 motion-safe:animate-skeleton-pulse"></div><div class="rounded-[4px] w-full h-4 bg-neutral-200 motion-safe:animate-skeleton-pulse"></div></div></div>
+                    <p class="sr-only" role="status">Cargando reportes atendidos…</p>
+                  </div>
+                </div>
+
+                <div class="flex flex-col gap-1 min-w-0" data-metric="tiempo-resolucion">
+                  <div class="flex flex-wrap items-center justify-between gap-2">
+                    <div class="flex items-center gap-1">
+                      <h4 class="font-outfit font-semibold text-[14px] leading-[1.3] text-cesa-blue-dark m-0">Tiempo de resolución</h4>
+                      <span class="group relative inline-flex">
+                  <button type="button" class="inline-flex items-center justify-center w-5 h-5 rounded-full text-neutral-600 hover:text-cesa-blue cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cesa-blue hit-44" aria-label="¿De dónde sale Tiempo de resolución?" aria-describedby="source-tiempo-resolucion" data-track="de-donde-sale"><svg viewBox="0 0 24 24" fill="currentColor" class="w-4 h-4" aria-hidden="true"><path d="M12 2.25C10.0716 2.25 8.18657 2.82183 6.58319 3.89317C4.97982 4.96451 3.73013 6.48726 2.99218 8.26884C2.25422 10.0504 2.06114 12.0108 2.43735 13.9021C2.81355 15.7934 3.74215 17.5307 5.10571 18.8943C6.46928 20.2579 8.20656 21.1865 10.0979 21.5627C11.9892 21.9389 13.9496 21.7458 15.7312 21.0078C17.5127 20.2699 19.0355 19.0202 20.1068 17.4168C21.1782 15.8134 21.75 13.9284 21.75 12C21.7473 9.41498 20.7192 6.93661 18.8913 5.10872C17.0634 3.28084 14.585 2.25273 12 2.25ZM12 20.25C10.3683 20.25 8.77326 19.7661 7.41655 18.8596C6.05984 17.9531 5.00242 16.6646 4.378 15.1571C3.75358 13.6496 3.5902 11.9908 3.90853 10.3905C4.22685 8.79016 5.01259 7.32015 6.16637 6.16637C7.32016 5.01259 8.79017 4.22685 10.3905 3.90852C11.9909 3.59019 13.6497 3.75357 15.1571 4.37799C16.6646 5.00242 17.9531 6.05984 18.8596 7.41655C19.7661 8.77325 20.25 10.3683 20.25 12C20.2475 14.1873 19.3775 16.2843 17.8309 17.8309C16.2843 19.3775 14.1873 20.2475 12 20.25ZM13.5 16.5C13.5 16.6989 13.421 16.8897 13.2803 17.0303C13.1397 17.171 12.9489 17.25 12.75 17.25C12.3522 17.25 11.9706 17.092 11.6893 16.8107C11.408 16.5294 11.25 16.1478 11.25 15.75V12C11.0511 12 10.8603 11.921 10.7197 11.7803C10.579 11.6397 10.5 11.4489 10.5 11.25C10.5 11.0511 10.579 10.8603 10.7197 10.7197C10.8603 10.579 11.0511 10.5 11.25 10.5C11.6478 10.5 12.0294 10.658 12.3107 10.9393C12.592 11.2206 12.75 11.6022 12.75 12V15.75C12.9489 15.75 13.1397 15.829 13.2803 15.9697C13.421 16.1103 13.5 16.3011 13.5 16.5ZM10.5 7.875C10.5 7.6525 10.566 7.43499 10.6896 7.24998C10.8132 7.06498 10.9889 6.92078 11.1945 6.83564C11.4001 6.75049 11.6263 6.72821 11.8445 6.77162C12.0627 6.81502 12.2632 6.92217 12.4205 7.0795C12.5778 7.23684 12.685 7.43729 12.7284 7.65552C12.7718 7.87375 12.7495 8.09995 12.6644 8.30552C12.5792 8.51109 12.435 8.68679 12.25 8.8104C12.065 8.93402 11.8475 9 11.625 9C11.3266 9 11.0405 8.88147 10.8295 8.6705C10.6185 8.45952 10.5 8.17337 10.5 7.875Z"/></svg></button>
+                  <div id="source-tiempo-resolucion" role="tooltip" class="hidden border border-white/20 group-hover:block group-focus:block group-focus-within:block absolute top-[calc(100%+4px)] right-0 z-50 bg-cesa-blue-dark text-neutral-100 font-outfit font-light text-[14px] md:text-xs leading-[1.4] md:leading-[1.3] px-3 py-3 md:py-2 rounded-xs w-[280px] max-w-[calc(100vw-32px)] text-left">
+                    <p class="m-0"><span class="font-medium">Qué es:</span> cuánto tarda un reporte desde que entra hasta que se cierra.</p>
+                    <p class="m-0 mt-1"><span class="font-medium">Fórmula:</span> promedio y mediana de (fecha de cierre − fecha de creación), por Golem y Persona.</p>
+                    <p class="m-0 mt-1"><span class="font-medium">Fuente:</span> triage y Tracker en Notion.</p>
+                    <p class="m-0 mt-1"><span class="font-medium">Frecuencia:</span> tiempo real.</p>
+                    <p class="m-0 mt-1"><span class="font-medium">Modo:</span> automático.</p>
+                    <p class="m-0 mt-1"><span class="font-medium">Activo:</span> C4L.</p>
+                  </div>
+                </span>
+                    </div>
+                    <span class="font-outfit font-light text-[12px] leading-[1.3] text-neutral-600 uppercase tracking-wide">Menor es mejor</span>
+                  </div>
+                  <div data-state="default">
+                    <ul class="grid grid-cols-1 md:grid-cols-3 gap-3 list-none m-0 p-0">
+                      <li class="bg-cesa-blue-dark rounded-[4px] px-3 py-2 flex flex-col items-start gap-0.5 min-w-0 text-white" data-kpi="promedio-golem" data-tile="T5">
+                        <p class="font-outfit font-bold text-[24px] leading-none tracking-[-1px] tabular-nums text-white m-0">3 h 40 min</p>
+                        <p class="font-outfit font-light text-[14px] md:text-[12px] leading-[1.3] text-neutral-100 m-0">promedio Golem</p>
+                        <span class="inline-flex items-center gap-1 rounded-[4px] px-1.5 py-0.5 text-[14px] md:text-[12px] font-medium leading-none bg-success-50 text-success-contrast" data-delta="favorable"><span aria-hidden="true">▼</span><span class="sr-only">Baja</span> −25 min</span>
+                      </li>
+                      <li class="bg-primary-azul-002 rounded-[4px] px-3 py-2 flex flex-col items-start gap-0.5 min-w-0 text-white" data-kpi="promedio-persona" data-tile="T2">
+                        <p class="font-outfit font-bold text-[24px] leading-none tracking-[-1px] tabular-nums text-white m-0">1 d 6 h</p>
+                        <p class="font-outfit font-light text-[14px] md:text-[12px] leading-[1.3] text-neutral-100 m-0">promedio persona</p>
+                        <span class="inline-flex items-center gap-1 rounded-[4px] px-1.5 py-0.5 text-[14px] md:text-[12px] font-medium leading-none bg-success-50 text-success-contrast" data-delta="favorable"><span aria-hidden="true">▼</span><span class="sr-only">Baja</span> −4 h</span>
+                      </li>
+                      <li class="bg-cesa-blue rounded-[4px] px-3 py-2 flex flex-col items-start gap-0.5 min-w-0 text-white" data-kpi="mediana" data-tile="T1">
+                        <p class="font-outfit font-bold text-[24px] leading-none tracking-[-1px] tabular-nums text-white m-0">52 min / 19 h</p>
+                        <p class="font-outfit font-light text-[14px] md:text-[12px] leading-[1.3] text-neutral-100 m-0">mediana Golem / persona</p>
+                        <span class="inline-flex items-center gap-1 rounded-[4px] px-1.5 py-0.5 text-[14px] md:text-[12px] font-medium leading-none bg-success-50 text-success-contrast" data-delta="favorable"><span aria-hidden="true">▼</span><span class="sr-only">Baja</span> −6 min / −2 h</span>
+                      </li>
+                    </ul>
+                  </div>
+                  <div data-state="empty-week">
+                    <ul class="grid grid-cols-1 md:grid-cols-3 gap-3 list-none m-0 p-0">
+                      <li class="bg-cesa-blue-dark rounded-[4px] px-3 py-2 flex flex-col items-start gap-0.5 min-w-0 text-white" data-kpi="promedio-golem" data-tile="T5">
+                        <p class="font-outfit font-bold text-[24px] leading-none tracking-[-1px] tabular-nums text-white m-0"><span aria-hidden="true">—</span><span class="sr-only">Sin valor</span></p>
+                        <p class="font-outfit font-light text-[14px] md:text-[12px] leading-[1.3] text-neutral-100 m-0">promedio Golem · ant. 4 h 05 min</p>
+                        
+                      </li>
+                      <li class="bg-primary-azul-002 rounded-[4px] px-3 py-2 flex flex-col items-start gap-0.5 min-w-0 text-white" data-kpi="promedio-persona" data-tile="T2">
+                        <p class="font-outfit font-bold text-[24px] leading-none tracking-[-1px] tabular-nums text-white m-0"><span aria-hidden="true">—</span><span class="sr-only">Sin valor</span></p>
+                        <p class="font-outfit font-light text-[14px] md:text-[12px] leading-[1.3] text-neutral-100 m-0">promedio persona · ant. 1 d 10 h</p>
+                        
+                      </li>
+                      <li class="bg-cesa-blue rounded-[4px] px-3 py-2 flex flex-col items-start gap-0.5 min-w-0 text-white" data-kpi="mediana" data-tile="T1">
+                        <p class="font-outfit font-bold text-[24px] leading-none tracking-[-1px] tabular-nums text-white m-0"><span aria-hidden="true">—</span><span class="sr-only">Sin valor</span></p>
+                        <p class="font-outfit font-light text-[14px] md:text-[12px] leading-[1.3] text-neutral-100 m-0">mediana Golem / persona · ant. 58 min / 21 h</p>
+                        
+                      </li>
+                    </ul>
+                  </div>
+                  <div data-state="source-error">
+                    <div class="flex flex-col items-center text-center gap-3 py-6 px-4 rounded-[4px] border border-neutral-200 bg-neutral-0" role="alert">
+                <p class="font-outfit font-light text-base leading-[1.3] text-neutral-600 max-w-md m-0">No pudimos leer los tiempos de resolución. Intenta de nuevo.</p>
+                <button type="button" data-retry data-track="reintentar"
+                        class="max-w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 min-h-[44px] rounded-[2px] font-outfit font-light text-[16px] leading-[16px] cursor-pointer transition-colors border border-cesa-blue bg-transparent text-cesa-blue hover:bg-neutral-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cesa-blue">
+                  <span class="min-w-0 truncate whitespace-nowrap py-[3px]">Reintentar</span>
+                </button>
+              </div>
+                  </div>
+                  <div data-state="loading">
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-3"><div class="rounded-[4px] border border-neutral-200 bg-white p-3 flex flex-col gap-1" aria-hidden="true"><div class="rounded-[4px] w-2/3 h-6 bg-neutral-200 motion-safe:animate-skeleton-pulse"></div><div class="rounded-[4px] w-full h-4 bg-neutral-200 motion-safe:animate-skeleton-pulse"></div></div><div class="rounded-[4px] border border-neutral-200 bg-white p-3 flex flex-col gap-1" aria-hidden="true"><div class="rounded-[4px] w-2/3 h-6 bg-neutral-200 motion-safe:animate-skeleton-pulse"></div><div class="rounded-[4px] w-full h-4 bg-neutral-200 motion-safe:animate-skeleton-pulse"></div></div><div class="rounded-[4px] border border-neutral-200 bg-white p-3 flex flex-col gap-1" aria-hidden="true"><div class="rounded-[4px] w-2/3 h-6 bg-neutral-200 motion-safe:animate-skeleton-pulse"></div><div class="rounded-[4px] w-full h-4 bg-neutral-200 motion-safe:animate-skeleton-pulse"></div></div></div>
+                    <p class="sr-only" role="status">Cargando tiempos de resolución…</p>
+                  </div>
+                </div>
+              </div>
+
+              <!-- (c) Gráfico de barras CSS (sin librerías): el contenedor llena la altura de la columna (flex-1 min-h-0) y las barras escalan con height:N% (dato mock: máximo 14 reportes = 82 %, el resto del alto reserva el rótulo con el valor). Excepción decidida (DEC-REP-43-058): el alto de cada barra es dato dinámico y queda inline, marcado con data-dynamic-style; no hay otro style en el markup -->
+              <div class="flex flex-col gap-1 min-w-0" data-chart="reportes-8-semanas">
+                <div class="flex items-center gap-1">
+                  <h4 class="font-outfit font-semibold text-[14px] leading-[1.3] text-cesa-blue-dark m-0">Últimas 8 semanas · reportes atendidos</h4>
+                </div>
+                <div data-state="default empty-week" class="flex-1 min-h-0">
+                  <div class="h-full rounded-[4px] border border-neutral-200 bg-white p-3 flex flex-col gap-2">
+                    <figure class="m-0 flex-1 min-h-0 flex flex-col gap-2" role="img" aria-label="Últimas 8 semanas, reportes atendidos por semana. Golem: 9, 11, 10, 12, 13, 11, 14, 14. Persona: 7, 8, 9, 8, 9, 8, 8, 9.">
+                      <figcaption class="flex flex-wrap items-center justify-end gap-3 font-outfit font-light text-[14px] md:text-[12px] leading-[1.3] text-neutral-600">
+                        <span class="inline-flex items-center gap-1"><span class="w-3 h-3 rounded-[2px] bg-cesa-blue"></span>Golem</span>
+                        <span class="inline-flex items-center gap-1"><span class="w-3 h-3 rounded-[2px] bg-primary-azul-005"></span>Persona</span>
+                      </figcaption>
+                      <div class="flex-1 min-h-[160px] flex items-end gap-2 border-b border-neutral-200" data-chart-area>
+                        <div class="flex-1 flex items-end justify-center gap-1 h-full min-w-0">
+                          <div class="flex flex-col items-center justify-end h-full min-w-0">
+                            <span class="font-outfit font-light text-[12px] leading-[1.3] tabular-nums text-cesa-blue-dark">9</span>
+                            <div class="w-3 rounded-t-[2px] bg-cesa-blue" style="height: 53%" data-dynamic-style="alto proporcional al dato; en Razor lo calcula el servidor"></div>
+                          </div>
+                          <div class="flex flex-col items-center justify-end h-full min-w-0">
+                            <span class="font-outfit font-light text-[12px] leading-[1.3] tabular-nums text-cesa-blue-dark">7</span>
+                            <div class="w-3 rounded-t-[2px] bg-primary-azul-005" style="height: 41%" data-dynamic-style="alto proporcional al dato; en Razor lo calcula el servidor"></div>
+                          </div>
+                        </div>
+                        <div class="flex-1 flex items-end justify-center gap-1 h-full min-w-0">
+                          <div class="flex flex-col items-center justify-end h-full min-w-0">
+                            <span class="font-outfit font-light text-[12px] leading-[1.3] tabular-nums text-cesa-blue-dark">11</span>
+                            <div class="w-3 rounded-t-[2px] bg-cesa-blue" style="height: 64%" data-dynamic-style="alto proporcional al dato; en Razor lo calcula el servidor"></div>
+                          </div>
+                          <div class="flex flex-col items-center justify-end h-full min-w-0">
+                            <span class="font-outfit font-light text-[12px] leading-[1.3] tabular-nums text-cesa-blue-dark">8</span>
+                            <div class="w-3 rounded-t-[2px] bg-primary-azul-005" style="height: 47%" data-dynamic-style="alto proporcional al dato; en Razor lo calcula el servidor"></div>
+                          </div>
+                        </div>
+                        <div class="flex-1 flex items-end justify-center gap-1 h-full min-w-0">
+                          <div class="flex flex-col items-center justify-end h-full min-w-0">
+                            <span class="font-outfit font-light text-[12px] leading-[1.3] tabular-nums text-cesa-blue-dark">10</span>
+                            <div class="w-3 rounded-t-[2px] bg-cesa-blue" style="height: 59%" data-dynamic-style="alto proporcional al dato; en Razor lo calcula el servidor"></div>
+                          </div>
+                          <div class="flex flex-col items-center justify-end h-full min-w-0">
+                            <span class="font-outfit font-light text-[12px] leading-[1.3] tabular-nums text-cesa-blue-dark">9</span>
+                            <div class="w-3 rounded-t-[2px] bg-primary-azul-005" style="height: 53%" data-dynamic-style="alto proporcional al dato; en Razor lo calcula el servidor"></div>
+                          </div>
+                        </div>
+                        <div class="flex-1 flex items-end justify-center gap-1 h-full min-w-0">
+                          <div class="flex flex-col items-center justify-end h-full min-w-0">
+                            <span class="font-outfit font-light text-[12px] leading-[1.3] tabular-nums text-cesa-blue-dark">12</span>
+                            <div class="w-3 rounded-t-[2px] bg-cesa-blue" style="height: 70%" data-dynamic-style="alto proporcional al dato; en Razor lo calcula el servidor"></div>
+                          </div>
+                          <div class="flex flex-col items-center justify-end h-full min-w-0">
+                            <span class="font-outfit font-light text-[12px] leading-[1.3] tabular-nums text-cesa-blue-dark">8</span>
+                            <div class="w-3 rounded-t-[2px] bg-primary-azul-005" style="height: 47%" data-dynamic-style="alto proporcional al dato; en Razor lo calcula el servidor"></div>
+                          </div>
+                        </div>
+                        <div class="flex-1 flex items-end justify-center gap-1 h-full min-w-0">
+                          <div class="flex flex-col items-center justify-end h-full min-w-0">
+                            <span class="font-outfit font-light text-[12px] leading-[1.3] tabular-nums text-cesa-blue-dark">13</span>
+                            <div class="w-3 rounded-t-[2px] bg-cesa-blue" style="height: 76%" data-dynamic-style="alto proporcional al dato; en Razor lo calcula el servidor"></div>
+                          </div>
+                          <div class="flex flex-col items-center justify-end h-full min-w-0">
+                            <span class="font-outfit font-light text-[12px] leading-[1.3] tabular-nums text-cesa-blue-dark">9</span>
+                            <div class="w-3 rounded-t-[2px] bg-primary-azul-005" style="height: 53%" data-dynamic-style="alto proporcional al dato; en Razor lo calcula el servidor"></div>
+                          </div>
+                        </div>
+                        <div class="flex-1 flex items-end justify-center gap-1 h-full min-w-0">
+                          <div class="flex flex-col items-center justify-end h-full min-w-0">
+                            <span class="font-outfit font-light text-[12px] leading-[1.3] tabular-nums text-cesa-blue-dark">11</span>
+                            <div class="w-3 rounded-t-[2px] bg-cesa-blue" style="height: 64%" data-dynamic-style="alto proporcional al dato; en Razor lo calcula el servidor"></div>
+                          </div>
+                          <div class="flex flex-col items-center justify-end h-full min-w-0">
+                            <span class="font-outfit font-light text-[12px] leading-[1.3] tabular-nums text-cesa-blue-dark">8</span>
+                            <div class="w-3 rounded-t-[2px] bg-primary-azul-005" style="height: 47%" data-dynamic-style="alto proporcional al dato; en Razor lo calcula el servidor"></div>
+                          </div>
+                        </div>
+                        <div class="flex-1 flex items-end justify-center gap-1 h-full min-w-0">
+                          <div class="flex flex-col items-center justify-end h-full min-w-0">
+                            <span class="font-outfit font-light text-[12px] leading-[1.3] tabular-nums text-cesa-blue-dark">14</span>
+                            <div class="w-3 rounded-t-[2px] bg-cesa-blue" style="height: 82%" data-dynamic-style="alto proporcional al dato; en Razor lo calcula el servidor"></div>
+                          </div>
+                          <div class="flex flex-col items-center justify-end h-full min-w-0">
+                            <span class="font-outfit font-light text-[12px] leading-[1.3] tabular-nums text-cesa-blue-dark">8</span>
+                            <div class="w-3 rounded-t-[2px] bg-primary-azul-005" style="height: 47%" data-dynamic-style="alto proporcional al dato; en Razor lo calcula el servidor"></div>
+                          </div>
+                        </div>
+                        <div class="flex-1 flex items-end justify-center gap-1 h-full min-w-0">
+                          <div class="flex flex-col items-center justify-end h-full min-w-0">
+                            <span class="font-outfit font-light text-[12px] leading-[1.3] tabular-nums text-cesa-blue-dark">14</span>
+                            <div class="w-3 rounded-t-[2px] bg-cesa-blue" style="height: 82%" data-dynamic-style="alto proporcional al dato; en Razor lo calcula el servidor"></div>
+                          </div>
+                          <div class="flex flex-col items-center justify-end h-full min-w-0">
+                            <span class="font-outfit font-light text-[12px] leading-[1.3] tabular-nums text-cesa-blue-dark">9</span>
+                            <div class="w-3 rounded-t-[2px] bg-primary-azul-005" style="height: 53%" data-dynamic-style="alto proporcional al dato; en Razor lo calcula el servidor"></div>
+                          </div>
+                        </div>
+                      </div>
+                      <div class="flex gap-2">
+                        <span class="flex-1 flex flex-col items-center font-outfit font-light text-[12px] leading-[1.3] text-neutral-600 tabular-nums"><span>S37</span><span>08/09</span></span>
+                        <span class="flex-1 flex flex-col items-center font-outfit font-light text-[12px] leading-[1.3] text-neutral-600 tabular-nums"><span>S38</span><span>15/09</span></span>
+                        <span class="flex-1 flex flex-col items-center font-outfit font-light text-[12px] leading-[1.3] text-neutral-600 tabular-nums"><span>S39</span><span>22/09</span></span>
+                        <span class="flex-1 flex flex-col items-center font-outfit font-light text-[12px] leading-[1.3] text-neutral-600 tabular-nums"><span>S40</span><span>29/09</span></span>
+                        <span class="flex-1 flex flex-col items-center font-outfit font-light text-[12px] leading-[1.3] text-neutral-600 tabular-nums"><span>S41</span><span>06/10</span></span>
+                        <span class="flex-1 flex flex-col items-center font-outfit font-light text-[12px] leading-[1.3] text-neutral-600 tabular-nums"><span>S42</span><span>13/10</span></span>
+                        <span class="flex-1 flex flex-col items-center font-outfit font-light text-[12px] leading-[1.3] text-neutral-600 tabular-nums"><span>S43</span><span>20/10</span></span>
+                        <span class="flex-1 flex flex-col items-center font-outfit font-light text-[12px] leading-[1.3] text-neutral-600 tabular-nums"><span>S44</span><span>27/10</span></span>
+                      </div>
+                    </figure>
+                    <div class="sr-only">
+                      <table>
+                        <caption>Reportes atendidos por semana, Golem y persona, últimas 8 semanas</caption>
+                        <thead><tr><th scope="col">Semana</th><th scope="col">Golem</th><th scope="col">Persona</th></tr></thead>
+                        <tbody><tr><th scope="row">S37 · inicio 08/09</th><td>9</td><td>7</td></tr><tr><th scope="row">S38 · inicio 15/09</th><td>11</td><td>8</td></tr><tr><th scope="row">S39 · inicio 22/09</th><td>10</td><td>9</td></tr><tr><th scope="row">S40 · inicio 29/09</th><td>12</td><td>8</td></tr><tr><th scope="row">S41 · inicio 06/10</th><td>13</td><td>9</td></tr><tr><th scope="row">S42 · inicio 13/10</th><td>11</td><td>8</td></tr><tr><th scope="row">S43 · inicio 20/10</th><td>14</td><td>8</td></tr><tr><th scope="row">S44 · inicio 27/10</th><td>14</td><td>9</td></tr></tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+                <div data-state="source-error">
+                  <div class="flex flex-col items-center text-center gap-3 py-6 px-4 rounded-[4px] border border-neutral-200 bg-neutral-0" role="alert">
+                <p class="font-outfit font-light text-base leading-[1.3] text-neutral-600 max-w-md m-0">No pudimos leer el histórico de reportes. Intenta de nuevo.</p>
+                <button type="button" data-retry data-track="reintentar"
+                        class="max-w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 min-h-[44px] rounded-[2px] font-outfit font-light text-[16px] leading-[16px] cursor-pointer transition-colors border border-cesa-blue bg-transparent text-cesa-blue hover:bg-neutral-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cesa-blue">
+                  <span class="min-w-0 truncate whitespace-nowrap py-[3px]">Reintentar</span>
+                </button>
+              </div>
+                </div>
+                <div data-state="loading">
+                  <div class="rounded-[4px] border border-neutral-200 bg-white p-3 flex flex-col gap-2" aria-hidden="true">
+                    <div class="rounded-[4px] w-1/2 h-4 bg-neutral-200 motion-safe:animate-skeleton-pulse"></div>
+                    <div class="rounded-[4px] w-full h-[120px] bg-neutral-200 motion-safe:animate-skeleton-pulse"></div>
+                  </div>
+                  <p class="sr-only" role="status">Cargando histórico de reportes…</p>
+                </div>
+              </div>
+
+            </div>
+          </section>
+
+          <!-- Impactos generados como tabla semántica (insights-v7 §7); en móvil cada fila se apila como card (CSS del wireframe) -->
+          <section class="bg-white rounded-[4px] shadow-sm hover:shadow-md transition-shadow p-2 flex flex-col gap-2" aria-labelledby="impacts-title" data-section="impactos-generados">
+            <div class="flex flex-wrap items-center gap-2">
+              <h3 id="impacts-title" class="font-outfit font-semibold text-[18px] leading-[1.3] text-cesa-blue-dark m-0">Impactos generados</h3>
+              <span class="inline-flex items-center px-2 py-1 rounded-full border text-[14px] md:text-[12px] font-outfit font-light leading-[1.3] w-fit whitespace-nowrap border-neutral-300 text-neutral-600">Ejemplos</span>
+            </div>
+
+            <div data-state="default empty-week">
+              <table class="w-full border-collapse text-left" data-table="impactos">
+                <caption class="sr-only">Impactos generados por bet: palanca que mueve, resultado y enlace a la evidencia</caption>
+                <thead>
+                  <tr class="border-b border-neutral-200">
+                    <th scope="col" class="font-outfit font-light text-[12px] leading-[1.3] uppercase tracking-wide text-neutral-600 pb-1 pr-3 whitespace-nowrap">Bet</th>
+                    <th scope="col" class="font-outfit font-light text-[12px] leading-[1.3] uppercase tracking-wide text-neutral-600 pb-1 px-3 whitespace-nowrap">Palanca</th>
+                    <th scope="col" class="font-outfit font-light text-[12px] leading-[1.3] uppercase tracking-wide text-neutral-600 pb-1 px-3 whitespace-nowrap">Resultado</th>
+                    <th scope="col" class="font-outfit font-light text-[12px] leading-[1.3] uppercase tracking-wide text-neutral-600 pb-1 pl-3 whitespace-nowrap">Ver</th>
+                  </tr>
+                </thead>
+                <tbody>
+                <tr class="border-b border-neutral-200 last:border-b-0 h-[46px]" data-impact="automatizacion-reportes-marketing">
+                  <th scope="row" class="font-outfit font-medium text-[14px] leading-[1.3] text-cesa-blue-dark py-3 pr-3 align-top">Automatización reportes marketing</th>
+                  <td data-label="Palanca" class="py-1 px-3 align-top"><span class="inline-flex items-center px-2 py-0.5 rounded-full text-[14px] md:text-[12px] font-outfit font-light leading-[1.3] whitespace-nowrap select-none text-white bg-cesa-blue-dark" data-tile="T5">COGS</span></td>
+                  <td data-label="Resultado" class="font-outfit font-light text-[14px] leading-[1.3] text-cesa-blue-dark py-3 px-3 align-top">Reducción de 5 horas operativas semanales.</td>
+                  <td data-label="Ver" class="py-1 pl-3 align-top whitespace-nowrap"><a href="#" data-track="ver-metrica-amplitude" class="font-outfit text-[14px] text-cesa-blue underline-offset-2 hover:underline inline-flex items-center gap-1 hit-44-y12">Ver métrica en Amplitude <span class="inline-flex items-center justify-center w-5 h-5 shrink-0"><img src="../assets/images/Redesign/svg/arrow-line-up-right.svg" alt="" class="w-4 h-4 shrink-0" aria-hidden="true"></span></a></td>
+                </tr>
+                <tr class="border-b border-neutral-200 last:border-b-0 h-[46px]" data-impact="optimizacion-landing-mba">
+                  <th scope="row" class="font-outfit font-medium text-[14px] leading-[1.3] text-cesa-blue-dark py-3 pr-3 align-top">Optimización landing MBA</th>
+                  <td data-label="Palanca" class="py-1 px-3 align-top"><span class="inline-flex items-center px-2 py-0.5 rounded-full text-[14px] md:text-[12px] font-outfit font-light leading-[1.3] whitespace-nowrap select-none text-white bg-primary-azul-003" data-tile="T3">Conversión</span></td>
+                  <td data-label="Resultado" class="font-outfit font-light text-[14px] leading-[1.3] text-cesa-blue-dark py-3 px-3 align-top">Incremento de 0,7 pp en conversión.</td>
+                  <td data-label="Ver" class="py-1 pl-3 align-top whitespace-nowrap"><a href="#" data-track="ver-cambio-visual" class="font-outfit text-[14px] text-cesa-blue underline-offset-2 hover:underline inline-flex items-center gap-1 hit-44-y12">Ver cambio visual <span class="inline-flex items-center justify-center w-5 h-5 shrink-0"><img src="../assets/images/Redesign/svg/arrow-right-regular.svg" alt="" class="w-4 h-4 shrink-0" aria-hidden="true"></span></a></td>
+                </tr>
+                <tr class="border-b border-neutral-200 last:border-b-0 h-[46px]" data-impact="ajuste-formulario-educacion-continua">
+                  <th scope="row" class="font-outfit font-medium text-[14px] leading-[1.3] text-cesa-blue-dark py-3 pr-3 align-top">Ajuste formulario Educación Continua</th>
+                  <td data-label="Palanca" class="py-1 px-3 align-top"><span class="inline-flex items-center px-2 py-0.5 rounded-full text-[14px] md:text-[12px] font-outfit font-light leading-[1.3] whitespace-nowrap select-none text-white bg-primary-azul-005" data-tile="T4">CAC</span></td>
+                  <td data-label="Resultado" class="font-outfit font-light text-[14px] leading-[1.3] text-cesa-blue-dark py-3 px-3 align-top">Reducción del 12 % en costo de adquisición.</td>
+                  <td data-label="Ver" class="py-1 pl-3 align-top whitespace-nowrap"><a href="#" data-track="ver-cambio-visual" class="font-outfit text-[14px] text-cesa-blue underline-offset-2 hover:underline inline-flex items-center gap-1 hit-44-y12">Ver cambio visual <span class="inline-flex items-center justify-center w-5 h-5 shrink-0"><img src="../assets/images/Redesign/svg/arrow-right-regular.svg" alt="" class="w-4 h-4 shrink-0" aria-hidden="true"></span></a></td>
+                </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <div data-state="source-error">
+              <div class="flex flex-col items-center text-center gap-3 py-6 px-4 rounded-[4px] border border-neutral-200 bg-neutral-0" role="alert">
+                <p class="font-outfit font-light text-base leading-[1.3] text-neutral-600 max-w-md m-0">No pudimos leer los impactos generados. Intenta de nuevo.</p>
+                <button type="button" data-retry data-track="reintentar"
+                        class="max-w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 min-h-[44px] rounded-[2px] font-outfit font-light text-[16px] leading-[16px] cursor-pointer transition-colors border border-cesa-blue bg-transparent text-cesa-blue hover:bg-neutral-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cesa-blue">
+                  <span class="min-w-0 truncate whitespace-nowrap py-[3px]">Reintentar</span>
+                </button>
+              </div>
+            </div>
+
+            <div data-state="loading">
+              <div class="flex flex-col gap-2" aria-hidden="true">
+                <div class="rounded-[4px] w-full h-4 bg-neutral-200 motion-safe:animate-skeleton-pulse"></div>
+                <div class="rounded-[4px] w-full h-6 bg-neutral-200 motion-safe:animate-skeleton-pulse"></div>
+                <div class="rounded-[4px] w-full h-6 bg-neutral-200 motion-safe:animate-skeleton-pulse"></div>
+                <div class="rounded-[4px] w-full h-6 bg-neutral-200 motion-safe:animate-skeleton-pulse"></div>
+              </div>
+              <p class="sr-only" role="status">Cargando impactos generados…</p>
+            </div>
+          </section>
+
+        </div>
+      </section>
+
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <!-- ====================================================================
+       FOOTER MÍNIMO (una línea)
+       ==================================================================== -->
+  <footer class="w-full text-white bg-primary-azul-004">
+    <div class="max-w-[1440px] mx-auto w-full px-4 py-3 flex flex-wrap items-center justify-between gap-3">
+      <div class="flex items-center gap-2">
+        <img src="../assets/images/Redesign/svg/LogoCesaFooter.svg" alt="CESA"
+             class="w-6 h-6 object-contain shrink-0">
+        <p class="font-outfit font-light text-[14px] leading-[1.3] m-0">CESA · Célula de Activos Digitales</p>
+      </div>
+      <p class="font-outfit font-light text-[14px] leading-[1.3] m-0">Línea base — esta vista no fija metas · 2026</p>
+    </div>
+  </footer>
+
+  <script>
+    (function () {
+      var ACTIVE = ['bg-neutral-100', 'border-b-2', 'border-cesa-blue'];
+      var INACTIVE = ['bg-white', 'border-b', 'border-neutral-400', 'hover:bg-neutral-100', 'hover:border-cesa-blue'];
+      var reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      var currentIndex = 0;
+
+      function staggerCards(panel) {
+        if (reducedMotion) return;
+        var cards = Array.prototype.slice.call(panel.querySelectorAll('.bg-white.rounded-\\[4px\\]:not(span)'));
+        cards.forEach(function (card, i) {
+          card.classList.remove('card-in');
+          void card.offsetWidth;
+          card.style.animationDelay = (i * 60) + 'ms'; /* solo el delay va inline: previsualización */
+          card.classList.add('card-in');
+          card.addEventListener('animationend', function () { card.classList.remove('card-in'); card.style.animationDelay = ''; }, { once: true });
+        });
+      }
+
+      function countUp(panel) {
+        if (reducedMotion || document.body.getAttribute('data-mock-state') !== 'default') return;
+        var values = Array.prototype.slice.call(panel.querySelectorAll('[data-block="titular"] [data-state="default"] .tabular-nums'));
+        values.forEach(function (el) {
+          var textNode = Array.prototype.filter.call(el.childNodes, function (n) { return n.nodeType === 3 && /\d/.test(n.textContent); })[0];
+          if (!textNode) return;
+          var original = textNode.textContent;
+          var match = original.match(/(\d{1,3}(?:\.\d{3})+|\d+)(?:,(\d+))?/);
+          if (!match) return;
+          var integer = parseInt(match[1].replace(/\./g, ''), 10);
+          var decimals = match[2] ? match[2].length : 0;
+          var target = integer + (match[2] ? parseInt(match[2], 10) / Math.pow(10, decimals) : 0);
+          var start = performance.now();
+          function format(n) {
+            var fixed = n.toFixed(decimals).split('.');
+            var int = fixed[0].replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+            return int + (decimals ? ',' + fixed[1] : '');
+          }
+          function frame(now) {
+            var t = Math.min(1, (now - start) / 600);
+            var eased = 1 - Math.pow(1 - t, 3);
+            textNode.textContent = original.replace(match[0], format(target * eased));
+            if (t < 1) requestAnimationFrame(frame); else textNode.textContent = original;
+          }
+          requestAnimationFrame(frame);
+        });
+      }
+      var tabs = Array.prototype.slice.call(document.querySelectorAll('[role="tab"][data-tab]'));
+      var panels = Array.prototype.slice.call(document.querySelectorAll('[data-tab-panel]'));
+
+      function activate(tabName, focus) {
+        tabs.forEach(function (tab) {
+          var isActive = tab.getAttribute('data-tab') === tabName;
+          tab.setAttribute('aria-selected', isActive ? 'true' : 'false');
+          tab.setAttribute('tabindex', isActive ? '0' : '-1');
+          ACTIVE.forEach(function (c) { tab.classList.toggle(c, isActive); });
+          INACTIVE.forEach(function (c) { tab.classList.toggle(c, !isActive); });
+          if (isActive && focus) tab.focus();
+        });
+        var nextIndex = tabs.findIndex(function (t) { return t.getAttribute('data-tab') === tabName; });
+        var direction = nextIndex >= currentIndex ? 'panel-in' : 'panel-back';
+        panels.forEach(function (panel) {
+          var isActive = panel.getAttribute('data-tab-panel') === tabName;
+          var wasHidden = panel.classList.contains('hidden');
+          panel.classList.toggle('hidden', !isActive);
+          panel.classList.remove('panel-in', 'panel-back');
+          if (isActive && wasHidden && !reducedMotion) {
+            void panel.offsetWidth;
+            panel.classList.add(direction);
+            panel.addEventListener('animationend', function () { panel.classList.remove(direction); }, { once: true });
+            staggerCards(panel);
+            countUp(panel);
+          }
+        });
+        currentIndex = nextIndex;
+      }
+
+      var initialPanel = document.querySelector('[data-tab-panel="general"]');
+      if (initialPanel) { staggerCards(initialPanel); countUp(initialPanel); }
+
+      tabs.forEach(function (tab, index) {
+        tab.addEventListener('click', function () { activate(tab.getAttribute('data-tab'), false); });
+        tab.addEventListener('keydown', function (event) {
+          var next = null;
+          if (event.key === 'ArrowRight') next = tabs[(index + 1) % tabs.length];
+          if (event.key === 'ArrowLeft') next = tabs[(index - 1 + tabs.length) % tabs.length];
+          if (event.key === 'Home') next = tabs[0];
+          if (event.key === 'End') next = tabs[tabs.length - 1];
+          if (next) { event.preventDefault(); activate(next.getAttribute('data-tab'), true); }
+        });
+      });
+
+      var dropdown = document.querySelector('[data-dropdown="assets"]');
+      if (dropdown) {
+        var trigger = dropdown.querySelector('#assets-trigger');
+        var group = dropdown.querySelector('#assets-group');
+        var triggerText = dropdown.querySelector('#assets-trigger-text');
+        var triggerDot = dropdown.querySelector('#assets-trigger-dot');
+        var selectAll = dropdown.querySelector('#assets-select-all');
+        var checkboxes = Array.prototype.slice.call(dropdown.querySelectorAll('input[type="checkbox"][name="assets"]'));
+        var enabled = checkboxes.filter(function (c) { return !c.disabled; });
+
+        function setOpen(open) {
+          group.classList.toggle('hidden', !open);
+          trigger.setAttribute('aria-expanded', open ? 'true' : 'false');
+        }
+
+        function renderSelection() {
+          var selected = checkboxes.filter(function (c) { return c.checked; });
+          var selectedEnabled = enabled.filter(function (c) { return c.checked; });
+          var allSelected = enabled.length > 0 && selectedEnabled.length === enabled.length;
+          selectAll.checked = allSelected;
+          selectAll.indeterminate = !allSelected && selectedEnabled.length > 0;
+          triggerDot.style.display = selected.length ? '' : 'none';
+          var labels = selected.map(function (c) { return c.getAttribute('data-asset-label'); });
+          var joined = labels.length > 1
+            ? labels.slice(0, -1).join(', ') + ' y ' + labels[labels.length - 1]
+            : labels[0];
+          triggerText.textContent = allSelected
+            ? triggerText.getAttribute('data-all-text')
+            : labels.length === 0
+            ? triggerText.getAttribute('data-empty-text')
+            : labels.length === 1
+              ? labels[0]
+              : labels.length + ' activos (' + joined + ')';
+        }
+
+        trigger.addEventListener('click', function () {
+          setOpen(trigger.getAttribute('aria-expanded') !== 'true');
+        });
+        checkboxes.forEach(function (c) { c.addEventListener('change', renderSelection); });
+        selectAll.addEventListener('change', function () {
+          enabled.forEach(function (c) { c.checked = selectAll.checked; });
+          renderSelection();
+        });
+        document.addEventListener('click', function (event) {
+          if (!dropdown.contains(event.target)) setOpen(false);
+        });
+        dropdown.addEventListener('keydown', function (event) {
+          if (event.key === 'Escape') { setOpen(false); trigger.focus(); }
+        });
+        dropdown.addEventListener('focusout', function (event) {
+          if (event.relatedTarget && !dropdown.contains(event.relatedTarget)) setOpen(false);
+        });
+        renderSelection();
+      }
+
+      var popovers = [];
+      Array.prototype.forEach.call(document.querySelectorAll('.group'), function (group) {
+        var tooltip = group.querySelector('[role="tooltip"]');
+        if (!tooltip) return;
+        var trigger = group.querySelector('[aria-describedby="' + tooltip.id + '"]');
+        popovers.push(tooltip);
+
+        function viewportSize() {
+          var vv = window.visualViewport;
+          return {
+            width: vv ? vv.width : document.documentElement.clientWidth,
+            height: vv ? vv.height : document.documentElement.clientHeight
+          };
+        }
+
+        function keepInViewport() {
+          tooltip.style.left = '';
+          tooltip.style.right = '';
+          tooltip.style.top = '';
+          tooltip.style.bottom = '';
+          var margin = 16;
+          var viewport = viewportSize();
+          var box = tooltip.getBoundingClientRect();
+          if (!box.width) return;
+          var anchor = group.getBoundingClientRect();
+          var mobile = viewport.width < 768;
+          if (mobile) {
+            // position: fixed a lo ancho (CSS); acá solo se decide si va debajo o encima del disparador
+            if (anchor.bottom + 4 + box.height <= viewport.height - margin) {
+              tooltip.style.top = (anchor.bottom + 4) + 'px';
+              tooltip.style.bottom = 'auto';
+            } else if (anchor.top - 4 - box.height >= margin) {
+              tooltip.style.top = (anchor.top - 4 - box.height) + 'px';
+              tooltip.style.bottom = 'auto';
+            }
+            return;
+          }
+          if (box.left < margin) {
+            tooltip.style.left = (margin - anchor.left) + 'px';
+            tooltip.style.right = 'auto';
+          } else if (box.right > viewport.width - margin) {
+            tooltip.style.right = (anchor.right - (viewport.width - margin)) + 'px';
+            tooltip.style.left = 'auto';
+          }
+          if (box.bottom > viewport.height - margin && anchor.top - box.height - 4 >= margin) {
+            tooltip.style.top = 'auto';
+            tooltip.style.bottom = 'calc(100% + 4px)';
+          }
+        }
+
+        function closeOthers() {
+          popovers.forEach(function (other) { if (other !== tooltip) other.classList.remove('is-open'); });
+        }
+
+        group.addEventListener('mouseenter', keepInViewport);
+        group.addEventListener('focusin', keepInViewport);
+        if (trigger) {
+          trigger.addEventListener('click', function (event) {
+            event.stopPropagation();
+            var open = !tooltip.classList.contains('is-open');
+            closeOthers();
+            tooltip.classList.toggle('is-open', open);
+            if (open) keepInViewport();
+          });
+        }
+      });
+      document.addEventListener('click', function (event) {
+        if (!event.target.closest('.group')) popovers.forEach(function (t) { t.classList.remove('is-open'); });
+      });
+      document.addEventListener('keydown', function (event) {
+        if (event.key === 'Escape') popovers.forEach(function (t) { t.classList.remove('is-open'); });
+      });
+
+      Array.prototype.forEach.call(document.querySelectorAll('[data-retry]'), function (button) {
+        button.addEventListener('click', function () {
+          var url = new URL(window.location);
+          url.searchParams.delete('mock');
+          window.location = url.toString();
+        });
+      });
+    })();
+  </script>
+
+  <!-- MOCK STATE PANEL — inyectado desde .design/templates/mock-state-panel.html -->
+  <style>
+    .mock-state-panel {
+      position: fixed;
+      bottom: 16px;
+      right: 16px;
+      z-index: 99999;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      background: rgba(4, 31, 62, 0.92);
+      backdrop-filter: blur(8px);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      border-radius: 8px;
+      padding: 8px;
+      max-width: min(260px, calc(100% - 32px));
+      font-family: 'Outfit', system-ui, sans-serif;
+    }
+    .mock-state-panel-title {
+      color: rgba(255, 255, 255, 0.6);
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      padding: 0 4px 4px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+      margin-bottom: 4px;
+    }
+    .mock-state-btn {
+      display: block;
+      width: 100%;
+      padding: 6px 10px;
+      border: 1px solid transparent;
+      border-radius: 4px;
+      background: transparent;
+      color: rgba(255, 255, 255, 0.8);
+      font-size: 12px;
+      text-align: left;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+    .mock-state-btn:hover {
+      background: rgba(255, 255, 255, 0.1);
+    }
+    .mock-state-btn.active {
+      background: rgba(0, 180, 216, 0.25);
+      border-color: rgba(0, 180, 216, 0.5);
+      color: #fff;
+      font-weight: 500;
+    }
+    /* Solo en este wireframe: comprimir/expandir el panel para que no tape la revisión */
+    .mock-state-panel-title {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+    .mock-state-toggle {
+      border: 1px solid rgba(255, 255, 255, 0.25);
+      border-radius: 4px;
+      background: transparent;
+      color: rgba(255, 255, 255, 0.8);
+      font: inherit;
+      font-size: 11px;
+      line-height: 1;
+      padding: 2px 6px;
+      cursor: pointer;
+    }
+    .mock-state-toggle:hover,
+    .mock-state-toggle:focus-visible {
+      background: rgba(255, 255, 255, 0.1);
+      color: #fff;
+      outline: none;
+    }
+    .mock-state-panel.is-collapsed .mock-state-panel-title {
+      border-bottom: 0;
+      margin-bottom: 0;
+      padding-bottom: 0;
+    }
+    .mock-state-panel.is-collapsed .mock-state-list {
+      display: none;
+    }
+  </style>
+  <div class="mock-state-panel">
+    <div class="mock-state-panel-title">
+      <span>🔍 Estados</span>
+      <button type="button" class="mock-state-toggle" aria-expanded="true" aria-controls="mock-state-list" aria-label="Ocultar estados">–</button>
+    </div>
+    <div id="mock-state-list" class="mock-state-list">
+      <!-- STATES_GO_HERE -->
+    </div>
+  </div>
+  <script>
+    (function () {
+      const STATES = [
+        { label: 'Normal: semana con datos', mock: '' },
+        { label: 'Vacío: semana sin datos', mock: 'empty-week' },
+        { label: 'Error: la fuente no responde', mock: 'source-error' },
+        { label: 'Cargando: primera carga', mock: 'loading' }
+      ];
+      const params = new URLSearchParams(window.location.search);
+      const currentMock = params.get('mock') || '';
+
+      function renderButtons() {
+        const panel = document.querySelector('.mock-state-panel');
+        const list = panel.querySelector('.mock-state-list');
+        STATES.forEach((s) => {
+          const btn = document.createElement('button');
+          btn.className = 'mock-state-btn' + (s.mock === currentMock ? ' active' : '');
+          btn.textContent = s.label;
+          btn.addEventListener('click', () => {
+            const url = new URL(window.location);
+            if (s.mock) {
+              url.searchParams.set('mock', s.mock);
+            } else {
+              url.searchParams.delete('mock');
+            }
+            window.location = url.toString();
+          });
+          list.appendChild(btn);
+        });
+      }
+
+      function setupToggle() {
+        const panel = document.querySelector('.mock-state-panel');
+        const toggle = panel.querySelector('.mock-state-toggle');
+        const key = 'mock-panel-collapsed-REP-43';
+        function apply(collapsed) {
+          panel.classList.toggle('is-collapsed', collapsed);
+          toggle.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+          toggle.setAttribute('aria-label', collapsed ? 'Mostrar estados' : 'Ocultar estados');
+          toggle.textContent = collapsed ? '+' : '–';
+        }
+        let collapsed = false;
+        try { collapsed = localStorage.getItem(key) === '1'; } catch (e) { collapsed = false; }
+        apply(collapsed);
+        toggle.addEventListener('click', () => {
+          collapsed = !collapsed;
+          apply(collapsed);
+          try { localStorage.setItem(key, collapsed ? '1' : '0'); } catch (e) { /* sin almacenamiento disponible */ }
+        });
+      }
+
+      renderButtons();
+      setupToggle();
+    })();
+  </script>
+</body>
+</html>
